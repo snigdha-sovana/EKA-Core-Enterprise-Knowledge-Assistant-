@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -36,12 +37,11 @@ def tenant1_user_token() -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_bm25_keyword_exact_match() -> None:
+def test_bm25_keyword_exact_match(tmp_path: Path) -> None:
     """BM25 successfully locates exact technical acronyms and error codes."""
     mock_vector_store = MagicMock()
     mock_vector_store.collection_name = "test_en"
-    mock_vector_store.persist_path = MagicMock()
-    mock_vector_store.persist_path.parent = MagicMock()
+    mock_vector_store.persist_path = tmp_path / "chroma"
 
     chunks = [
         {"id": "c1", "document": "The database reported ERR_CODE_9042_DEADLOCK during checkout.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},
@@ -59,10 +59,11 @@ def test_bm25_keyword_exact_match() -> None:
     assert results[0]["score"] > 0
 
 
-def test_bm25_tenant_partitioning_isolation() -> None:
+def test_bm25_tenant_partitioning_isolation(tmp_path: Path) -> None:
     """Tenant 2 cannot retrieve chunks from Tenant 1's BM25 index."""
     mock_vector_store = MagicMock()
     mock_vector_store.collection_name = "test_en"
+    mock_vector_store.persist_path = tmp_path / "chroma"
 
     tenant1_chunks = [
         {"id": "t1_c1", "document": "CONFIDENTIAL_PROJECT_NEBULA specifications and budget.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},
@@ -94,10 +95,11 @@ def test_bm25_tenant_partitioning_isolation() -> None:
     assert len(t2_results) == 0
 
 
-def test_reciprocal_rank_fusion_combined_ranking() -> None:
+def test_reciprocal_rank_fusion_combined_ranking(tmp_path: Path) -> None:
     """RRF ranks higher items that appear in both BM25 and Vector search results."""
     mock_vector_store = MagicMock()
     mock_vector_store.collection_name = "test_en"
+    mock_vector_store.persist_path = tmp_path / "chroma"
 
     chunks = [
         {"id": "c_both", "document": "Enterprise Knowledge Assistant deployment guide.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},

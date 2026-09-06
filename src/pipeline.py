@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import gettext
 import logging
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -388,7 +389,10 @@ class RAGPipeline:
         from src.retrieval.access_filter import build_chroma_where_clause, filter_chunks_by_access
 
         fetch_k = self.config.top_k_retrieval if use_reranker else k
-        where = build_chroma_where_clause(user)
+        # Preserve the legacy/default collection behaviour for internal tools
+        # that do not supply a user context.  Passing an empty Chroma filter
+        # produces no matches on some Chroma versions.
+        where = build_chroma_where_clause(user) if user is not None else None
 
         if use_hybrid:
             raw_contexts = self._get_hybrid_retriever(lang).search(

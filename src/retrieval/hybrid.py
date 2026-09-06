@@ -341,7 +341,12 @@ class HybridRetriever:
 
         results = []
         for idx in top_indices:
-            if scores[idx] > 0:
+            # ``rank_bm25`` can return a negative score when a term occurs in
+            # every document in a small corpus (for example, a tenant with one
+            # indexed document).  A non-zero score still represents a match;
+            # filtering only positive scores silently drops those tenant-local
+            # results.
+            if scores[idx] != 0:
                 results.append(
                     {
                         "id": corpus_ids[idx],

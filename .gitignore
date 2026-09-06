@@ -52,3 +52,5 @@ coverage.xml
 dist/
 build/
 data/bm25_index_*.json
+MagicMock/
+

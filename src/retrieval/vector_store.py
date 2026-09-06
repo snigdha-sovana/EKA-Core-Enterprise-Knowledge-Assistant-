@@ -192,11 +192,14 @@ class VectorStore:
 
         return self._format_results(results)
 
-    def get_all_chunks(self) -> list[dict[str, Any]]:
-        """Retrieve all chunks (used for hybrid index building)."""
+    def get_all_chunks(
+        self,
+        where: dict[str, str | int | float] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Retrieve all chunks, optionally constrained by flat metadata."""
 
         def _get():
-            return self._collection.get(include=["documents", "metadatas"])
+            return self._collection.get(include=["documents", "metadatas"], where=where)
 
         results = retry_with_backoff(_get, retries=3, backoff_in_seconds=0.5)
         return self._format_get_results(results)
