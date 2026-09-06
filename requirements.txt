@@ -3,46 +3,46 @@
 # =============================================================================
 
 # Configuration
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-python-dotenv>=1.0.0
+pydantic>=2.13.5
+pydantic-settings>=2.15.0
+python-dotenv>=1.2.3
 
 # Ingestion
-pypdf>=3.0.0                         # PDF document loading
+pypdf>=6.16.2                         # PDF document loading
 
 # Vector Store & Embeddings
-chromadb>=0.4.0                      # Vector database
-sentence-transformers>=2.2.0         # Embedding models + cross-encoders
+chromadb>=1.5.9                      # Vector database
+sentence-transformers>=6.0.1         # Embedding models + cross-encoders
 
 # Hybrid Search
-rank-bm25>=0.2.0                     # BM25 keyword retrieval
+rank-bm25>=0.2.2                     # BM25 keyword retrieval
 
 # Generation (Free Providers)
-groq>=0.9.0                          # Groq fast cloud inference
-ollama>=0.3.0                        # Ollama local inference
+groq>=1.7.0                          # Groq fast cloud inference
+ollama>=0.6.2                        # Ollama local inference
 
 # Database & Migrations
-sqlalchemy[asyncio]>=2.0.30          # Async ORM
-asyncpg>=0.29.0                      # Async PostgreSQL driver
-alembic>=1.13.0                      # DB schema migrations
+sqlalchemy[asyncio]>=2.0.52          # Async ORM
+asyncpg>=0.31.0                      # Async PostgreSQL driver
+alembic>=1.19.1                      # DB schema migrations
 
 # Caching & Background Workers
-redis[hiredis]>=5.0.0                # Redis client with C parser
-celery[redis]>=5.4.0                 # Distributed task queue
+redis[hiredis]>=8.1.0                # Redis client with C parser
+celery[redis]>=5.6.3                 # Distributed task queue
 
 # Authentication & Security
-python-jose[cryptography]>=3.3.0     # JWT encoding/decoding
+python-jose[cryptography]>=3.5.0     # JWT encoding/decoding
 passlib[bcrypt]>=1.7.4               # Password hashing
-bcrypt>=4.0.0                        # Bcrypt backend
-python-multipart>=0.0.9              # Form data support
+bcrypt>=5.0.0                        # Bcrypt backend
+python-multipart>=0.0.32              # Form data support
 
 # HTTP & Utilities
-httpx>=0.27.0                        # Async HTTP client
-slowapi>=0.1.9                       # Rate limiting middleware
-tqdm>=4.65.0                         # Progress bars
+httpx>=0.28.1                        # Async HTTP client
+slowapi>=0.1.10                       # Rate limiting middleware
+tqdm>=4.70.0                         # Progress bars
 langdetect>=1.0.9                    # Language detection for routing
-prometheus-client>=0.20.0            # /metrics scrape endpoint
+prometheus-client>=0.26.0            # /metrics scrape endpoint
 
 # API service
-fastapi>=0.110.0                     # HTTP API layer
-uvicorn[standard]>=0.29.0            # ASGI server
+fastapi>=0.141.1                     # HTTP API layer
+uvicorn[standard]>=0.52.4            # ASGI server
