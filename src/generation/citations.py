@@ -15,6 +15,7 @@ class Citation:
     filename: str
     text_snippet: str
     score: float = 0.0
+    rerank_score: float | None = None
 
 
 class CitationFormatter:
@@ -26,11 +27,10 @@ class CitationFormatter:
         citations: list[Citation] = []
         for i, r in enumerate(results):
             meta = r.get("metadata", {})
-            score = r.get("rerank_score")
+            rerank_score = r.get("rerank_score")
+            score = r.get("score")
             if score is None:
-                score = r.get("score")
-            if score is None:
-                score = 0.0
+                score = rerank_score if rerank_score is not None else 0.0
             citations.append(
                 Citation(
                     chunk_id=r.get("id", f"chunk-{i}"),
@@ -38,6 +38,7 @@ class CitationFormatter:
                     filename=meta.get("filename", "unknown"),
                     text_snippet=r.get("document", ""),
                     score=score,
+                    rerank_score=rerank_score,
                 )
             )
         return citations
@@ -84,6 +85,7 @@ class CitationFormatter:
                 "filename": c.filename,
                 "text_snippet": c.text_snippet,
                 "score": c.score,
+                "rerank_score": c.rerank_score,
             }
             for c in citations
         ]

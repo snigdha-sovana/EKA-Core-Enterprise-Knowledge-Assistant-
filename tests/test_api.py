@@ -25,9 +25,24 @@ def _reset_pipeline_singleton() -> None:
     api_app.reset_pipeline()
 
 
+def _make_authed_client() -> TestClient:
+    from src.auth.security import create_access_token
+
+    token = create_access_token({
+        "sub": "00000000-0000-0000-0000-000000000001",
+        "email": "admin@example.com",
+        "tenant_id": "00000000-0000-0000-0000-000000000001",
+        "roles": ["admin", "curator", "viewer"],
+        "is_superadmin": True,
+    })
+    c = TestClient(api_app.app)
+    c.headers["Authorization"] = f"Bearer {token}"
+    return c
+
+
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(api_app.app)
+    return _make_authed_client()
 
 
 def test_healthz_returns_ok(client: TestClient) -> None:
@@ -105,7 +120,7 @@ def test_ingest_async_returns_job_id_and_completes(sample_docs_dir: Path) -> Non
     # `with`, each call can run on its own short-lived loop and the task
     # never progresses — a TestClient quirk, not a real-server behavior
     # (verified separately against a live uvicorn process).
-    with TestClient(api_app.app) as client:
+    with _make_authed_client() as client:
         response = client.post(
             "/ingest/async", json={"source": str(sample_docs_dir), "reset": True}
         )
@@ -141,7 +156,7 @@ def test_ingest_async_job_records_failure(
 
     monkeypatch.setattr(pipeline, "ingest", boom)
 
-    with TestClient(api_app.app) as client:
+    with _make_authed_client() as client:
         response = client.post(
             "/ingest/async", json={"source": str(sample_docs_dir), "reset": False}
         )

@@ -1,35 +1,41 @@
-"""Shared LLM provider client (OpenAI / Anthropic) with retry handling.
+"""Shared LLM provider client (Groq / Ollama / OpenAI / Anthropic) with retry handling.
 
-Centralizes the provider dispatch + retry logic that was previously
-duplicated across ``Generator``, ``FaithfulnessScorer``, and
-``AnswerRelevanceScorer``.
+Centralizes the provider dispatch + retry logic across Generator, FaithfulnessScorer,
+and AnswerRelevanceScorer.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
+from src.generation.providers.groq_provider import GroqProvider
+from src.generation.providers.ollama_provider import OllamaProvider
 from src.utils.retry import async_retry_with_backoff, retry_with_backoff
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
-    """Thin wrapper around the OpenAI and Anthropic chat/messages APIs.
+    """Thin wrapper around LLM backends (Groq, Ollama, OpenAI, Anthropic).
 
     Args:
-        provider: "openai" or "anthropic".
+        provider: "groq", "ollama", "openai", or "anthropic".
         model: Model name passed to the provider API.
         timeout: Per-request timeout in seconds.
     """
 
     def __init__(
         self,
-        provider: Literal["openai", "anthropic"] = "openai",
-        model: str = "gpt-4o-mini",
+        provider: Literal["groq", "ollama", "openai", "anthropic"] = "groq",
+        model: str = "llama-3.1-70b-versatile",
         timeout: float = 60.0,
     ) -> None:
         self.provider = provider
         self.model = model
         self.timeout = timeout
+        self._groq_provider: GroqProvider | None = None
+        self._ollama_provider: OllamaProvider | None = None
 
     def complete(
         self,
@@ -38,22 +44,16 @@ class LLMClient:
         temperature: float = 0.0,
         max_tokens: int = 1024,
     ) -> str:
-        """Generate a completion for ``prompt``, optionally with a system prompt.
-
-        Args:
-            prompt: The user message content.
-            system: Optional system prompt.
-            temperature: Sampling temperature.
-            max_tokens: Maximum tokens in the response.
-
-        Returns:
-            The model's text response (empty string if none).
-
-        Raises:
-            ImportError: If the required provider SDK is not installed.
-            ValueError: If ``provider`` is not supported.
-        """
-        if self.provider == "openai":
+        """Generate a completion for ``prompt``, optionally with a system prompt."""
+        if self.provider == "groq":
+            if self._groq_provider is None:
+                self._groq_provider = GroqProvider(model=self.model, timeout=self.timeout)
+            return self._groq_provider.complete(prompt, system, temperature, max_tokens)
+        elif self.provider == "ollama":
+            if self._ollama_provider is None:
+                self._ollama_provider = OllamaProvider(model=self.model, timeout=self.timeout)
+            return self._ollama_provider.complete(prompt, system, temperature, max_tokens)
+        elif self.provider == "openai":
             return self._call_openai(prompt, system, temperature, max_tokens)
         elif self.provider == "anthropic":
             return self._call_anthropic(prompt, system, temperature, max_tokens)
@@ -66,29 +66,23 @@ class LLMClient:
         temperature: float = 0.0,
         max_tokens: int = 1024,
     ) -> str:
-        """Generate a completion for ``prompt`` asynchronously, optionally with a system prompt.
-
-        Args:
-            prompt: The user message content.
-            system: Optional system prompt.
-            temperature: Sampling temperature.
-            max_tokens: Maximum tokens in the response.
-
-        Returns:
-            The model's text response (empty string if none).
-
-        Raises:
-            ImportError: If the required provider SDK is not installed.
-            ValueError: If ``provider`` is not supported.
-        """
-        if self.provider == "openai":
+        """Generate a completion for ``prompt`` asynchronously."""
+        if self.provider == "groq":
+            if self._groq_provider is None:
+                self._groq_provider = GroqProvider(model=self.model, timeout=self.timeout)
+            return await self._groq_provider.complete_async(prompt, system, temperature, max_tokens)
+        elif self.provider == "ollama":
+            if self._ollama_provider is None:
+                self._ollama_provider = OllamaProvider(model=self.model, timeout=self.timeout)
+            return await self._ollama_provider.complete_async(prompt, system, temperature, max_tokens)
+        elif self.provider == "openai":
             return await self._call_openai_async(prompt, system, temperature, max_tokens)
         elif self.provider == "anthropic":
             return await self._call_anthropic_async(prompt, system, temperature, max_tokens)
         raise ValueError(f"Unsupported LLM provider: {self.provider}")
 
     # ------------------------------------------------------------------
-    # Providers
+    # Legacy / Fallback Providers
     # ------------------------------------------------------------------
 
     def _call_openai(
@@ -115,7 +109,6 @@ class LLMClient:
             )
 
         import time
-
         from src.utils.usage import request_usage
 
         start_time = time.perf_counter()
@@ -161,7 +154,6 @@ class LLMClient:
                 )
 
         import time
-
         from src.utils.usage import request_usage
 
         start_time = time.perf_counter()
@@ -201,7 +193,6 @@ class LLMClient:
             )
 
         import time
-
         from src.utils.usage import request_usage
 
         start_time = time.perf_counter()
@@ -247,7 +238,6 @@ class LLMClient:
                 )
 
         import time
-
         from src.utils.usage import request_usage
 
         start_time = time.perf_counter()

@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1
+
+# ── Stage 1: dependency installer ──────────────────────────────────────────
+FROM python:3.11-slim AS deps
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /install
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --prefix=/install/pkg -r requirements.txt
+
+# ── Stage 2: production worker runtime ──────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/app/.cache
+
+WORKDIR /app
+
+# Copy installed packages from deps stage
+COPY --from=deps /install/pkg /usr/local
+
+# Copy application source
+COPY src ./src
+COPY scripts ./scripts
+COPY setup.py ./
+
+# Run as a non-root user
+RUN useradd --create-home --shell /bin/bash --uid 1001 app \
+    && chown -R app:app /app
+USER app
+
+ENTRYPOINT ["celery"]
+CMD ["-A", "src.worker.celery_app", "worker", "--loglevel=info", "-c", "4"]

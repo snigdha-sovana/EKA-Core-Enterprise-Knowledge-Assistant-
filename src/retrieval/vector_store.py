@@ -8,8 +8,15 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
+try:
+    import chromadb
+    from chromadb.config import Settings as ChromaSettings
+except ImportError:
+    chromadb = None
+
+    class ChromaSettings:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            pass
 
 from src.ingestion.chunker import Chunk
 from src.utils.retry import retry_with_backoff
@@ -46,6 +53,9 @@ class VectorStore:
         self.chroma_host = chroma_host
         self.chroma_port = chroma_port
 
+        if chromadb is None:
+            raise ImportError("chromadb is not installed. Please install it using 'pip install chromadb'.")
+
         # Lazy-load embedding function
         self._embedding_fn = _ChromaEmbeddingFunction(
             model_name=embedding_model, query_cache_size=embedding_query_cache_size
@@ -56,6 +66,7 @@ class VectorStore:
             _host: str = self.chroma_host  # narrow str | None → str for the closure
 
             def _init_client():
+                # pyrefly: ignore [missing-attribute]
                 client = chromadb.HttpClient(
                     host=_host,
                     port=self.chroma_port or 8000,
@@ -128,12 +139,22 @@ class VectorStore:
 
     def _max_batch_size(self) -> int:
         """Return the maximum number of records Chroma accepts per add() call."""
+        # Check for modern get_max_batch_size method
         get_max = getattr(self._client, "get_max_batch_size", None)
         if callable(get_max):
             try:
-                return int(get_max())
+                max_val = get_max()
+                if isinstance(max_val, int):
+                    return max_val
+                return int(max_val)
             except Exception:
-                logger.debug("get_max_batch_size() failed, using default", exc_info=True)
+                logger.debug("get_max_batch_size() failed", exc_info=True)
+                
+        # Check for legacy max_batch_size property
+        max_batch = getattr(self._client, "max_batch_size", None)
+        if isinstance(max_batch, int):
+            return max_batch
+            
         return self.DEFAULT_MAX_BATCH_SIZE
 
     def count(self) -> int:

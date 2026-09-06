@@ -65,7 +65,10 @@ class RAGPipeline:
 
     MAX_QUESTION_LENGTH = 2000
 
-    def __init__(self, llm_provider: Literal["openai", "anthropic"] | None = None) -> None:
+    def __init__(
+        self,
+        llm_provider: Literal["groq", "ollama", "openai", "anthropic"] | None = None,
+    ) -> None:
         self.config = settings
 
         # Ingestion
@@ -123,19 +126,52 @@ class RAGPipeline:
     # Ingestion
     # ------------------------------------------------------------------
 
-    def ingest(self, source: Path | str) -> int:
-        """Load, chunk, and index documents from a file or directory.
+    def ingest(
+        self,
+        source: Path | str,
+        title: str | None = None,
+        access_policy: Any = None,
+        tenant_id: str | None = None,
+        doc_id: str | None = None,
+    ) -> int:
+        """Load, chunk, and index documents from a file or directory with ACL metadata.
 
         Automatically detects document chunk language and routes to the matching collection.
 
         Args:
             source: Path to a file or directory.
+            title: Optional document title.
+            access_policy: Optional AccessPolicy object or dict.
+            tenant_id: Tenant ID for isolation.
+            doc_id: Unique document ID.
 
         Returns:
             Number of chunks ingested.
         """
+        from src.ingestion.access_control import AccessPolicy, build_chunk_acl_metadata
+
         docs = self.loader.load(source)
+
+        policy_obj = access_policy
+        if isinstance(access_policy, dict):
+            policy_obj = AccessPolicy(**access_policy)
+
+        acl_meta = build_chunk_acl_metadata(
+            tenant_id=tenant_id or "default",
+            doc_id=doc_id or str(uuid.uuid4()),
+            policy=policy_obj,
+        )
+        if title:
+            acl_meta["title"] = title
+
+        for doc in docs:
+            doc.metadata.update(acl_meta)
+            if doc_id:
+                doc.doc_id = doc_id
+
         chunks = self.chunker.chunk_many(docs)
+        for chunk in chunks:
+            chunk.metadata.update(acl_meta)
 
         chunks_by_lang: dict[str, list[Any]] = {}
         for chunk in chunks:
@@ -148,9 +184,9 @@ class RAGPipeline:
             count = vs.add_chunks(lang_chunks)
             total_count += count
 
-            # Invalidate corresponding hybrid index
+            # Invalidate corresponding hybrid index for this tenant
             if lang in self._hybrid_retrievers:
-                self._hybrid_retrievers[lang].invalidate_index()
+                self._hybrid_retrievers[lang].invalidate_index(tenant_id=tenant_id)
 
         logger.info("Ingested %d chunks from %s", total_count, source)
         return total_count
@@ -165,17 +201,19 @@ class RAGPipeline:
         top_k: int | None = None,
         use_hybrid: bool = False,
         use_reranker: bool = False,
-    ) -> tuple[str, list[Citation]]:
-        """Answer a question using the RAG pipeline.
+        user: Any = None,
+    ) -> tuple[str, list[Citation], bool, float]:
+        """Answer a question using the RAG pipeline with permission-based retrieval.
 
         Args:
             question: The user's query string.
             top_k: Number of final context chunks (default: from config).
             use_hybrid: Enable BM25 + vector hybrid search (Phase 2).
             use_reranker: Enable cross-encoder re-ranking (Phase 2).
+            user: Optional UserContext for access filtering.
 
         Returns:
-            Tuple of (answer_text, list_of_citations).
+            Tuple of (answer_text, list_of_citations, abstained, confidence_score).
 
         Raises:
             ValueError: If the question is empty or exceeds the maximum length.
@@ -200,7 +238,7 @@ class RAGPipeline:
             k = top_k or self.config.top_k_final
 
             contexts = self._retrieve(
-                question, use_hybrid=use_hybrid, use_reranker=use_reranker, k=k, lang=lang
+                question, use_hybrid=use_hybrid, use_reranker=use_reranker, k=k, lang=lang, user=user
             )
 
             if not contexts:
@@ -210,17 +248,34 @@ class RAGPipeline:
                         "I could not find any relevant information in the knowledge base to answer your question."
                     ),
                     [],
+                    True,
+                    0.0
                 )
 
             if use_reranker:
                 contexts = self._apply_reranker(question, contexts, top_k=k)
+
+            # Phase 4: Abstention logic
+            confidence_score = max(
+                (c.get("rerank_score") if c.get("rerank_score") is not None else c.get("score", 0.0)) 
+                for c in contexts
+            ) if contexts else 0.0
+
+            if confidence_score < 0.3:
+                logger.info("Abstaining due to low confidence score: %.4f < 0.3", confidence_score)
+                return (
+                    _("I do not have sufficient authoritative information in the indexed documents to answer this question reliably."),
+                    [],
+                    True,
+                    confidence_score
+                )
 
             contexts_for_generation = self._apply_context_budget(contexts)
             answer = self.generator.generate(question, contexts_for_generation)
             citations = self.citation_formatter.build_citations(contexts)
 
             logger.info("Answered query in %d context chunks", len(contexts))
-            return answer, citations
+            return answer, citations, False, confidence_score
         finally:
             if token is not None:
                 _current_translation.reset(token)
@@ -231,17 +286,19 @@ class RAGPipeline:
         top_k: int | None = None,
         use_hybrid: bool = False,
         use_reranker: bool = False,
-    ) -> tuple[str, list[Citation]]:
-        """Answer a question using the RAG pipeline asynchronously.
+        user: Any = None,
+    ) -> tuple[str, list[Citation], bool, float]:
+        """Answer a question using the RAG pipeline asynchronously with permission filtering.
 
         Args:
             question: The user's query string.
             top_k: Number of final context chunks (default: from config).
             use_hybrid: Enable BM25 + vector hybrid search (Phase 2).
             use_reranker: Enable cross-encoder re-ranking (Phase 2).
+            user: Optional UserContext for access filtering.
 
         Returns:
-            Tuple of (answer_text, list_of_citations).
+            Tuple of (answer_text, list_of_citations, abstained, confidence_score).
 
         Raises:
             ValueError: If the question is empty or exceeds the maximum length.
@@ -274,6 +331,7 @@ class RAGPipeline:
                 use_reranker=use_reranker,
                 k=k,
                 lang=lang,
+                user=user,
             )
 
             if not contexts:
@@ -283,6 +341,8 @@ class RAGPipeline:
                         "I could not find any relevant information in the knowledge base to answer your question."
                     ),
                     [],
+                    True,
+                    0.0
                 )
 
             if use_reranker:
@@ -290,12 +350,27 @@ class RAGPipeline:
                     self._apply_reranker, question, contexts, top_k=k
                 )
 
+            # Phase 4: Abstention logic
+            confidence_score = max(
+                (c.get("rerank_score") if c.get("rerank_score") is not None else c.get("score", 0.0)) 
+                for c in contexts
+            ) if contexts else 0.0
+
+            if confidence_score < 0.3:
+                logger.info("Abstaining due to low confidence score: %.4f < 0.3", confidence_score)
+                return (
+                    _("I do not have sufficient authoritative information in the indexed documents to answer this question reliably."),
+                    [],
+                    True,
+                    confidence_score
+                )
+
             contexts_for_generation = self._apply_context_budget(contexts)
             answer = await self.generator.generate_async(question, contexts_for_generation)
             citations = self.citation_formatter.build_citations(contexts)
 
             logger.info("Answered query in %d context chunks (async)", len(contexts))
-            return answer, citations
+            return answer, citations, False, confidence_score
         finally:
             if token is not None:
                 _current_translation.reset(token)
@@ -307,13 +382,23 @@ class RAGPipeline:
         use_reranker: bool = False,
         k: int = 5,
         lang: str = "en",
+        user: Any = None,
     ) -> list[dict[str, Any]]:
-        """Retrieve relevant context chunks."""
+        """Retrieve relevant context chunks with permission filtering."""
+        from src.retrieval.access_filter import build_chroma_where_clause, filter_chunks_by_access
+
         fetch_k = self.config.top_k_retrieval if use_reranker else k
+        where = build_chroma_where_clause(user)
 
         if use_hybrid:
-            return self._get_hybrid_retriever(lang).search(query, k=fetch_k)
-        return self._get_vector_store(lang).similarity_search(query, k=fetch_k)
+            raw_contexts = self._get_hybrid_retriever(lang).search(
+                query, k=fetch_k, where=where, user=user
+            )
+        else:
+            raw_contexts = self._get_vector_store(lang).similarity_search(query, k=fetch_k, where=where)
+            raw_contexts = filter_chunks_by_access(raw_contexts, user)
+
+        return raw_contexts
 
     def _apply_context_budget(self, contexts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Trim retrieved contexts so their combined text stays within ``config.max_context_chars``."""

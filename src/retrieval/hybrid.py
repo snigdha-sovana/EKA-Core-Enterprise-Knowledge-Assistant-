@@ -2,11 +2,55 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import math
+import os
+import re
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from rank_bm25 import BM25Okapi
+try:
+    from rank_bm25 import BM25Okapi
+except ImportError:
+    class BM25Okapi:  # type: ignore
+        """Pure-Python fallback implementation of BM25Okapi when rank_bm25 is not installed."""
+
+        def __init__(self, corpus: list[list[str]], k1: float = 1.5, b: float = 0.75):
+            self.corpus = corpus
+            self.k1 = k1
+            self.b = b
+            self.corpus_size = len(corpus)
+            self.doc_lens = [len(doc) for doc in corpus]
+            self.avgdl = sum(self.doc_lens) / self.corpus_size if self.corpus_size > 0 else 1.0
+
+            # Document frequency
+            self.doc_freqs: list[Counter] = [Counter(doc) for doc in corpus]
+            self.nd: dict[str, int] = {}
+            for doc in corpus:
+                for word in set(doc):
+                    self.nd[word] = self.nd.get(word, 0) + 1
+
+            # Precompute IDFs
+            self.idf: dict[str, float] = {}
+            for word, freq in self.nd.items():
+                self.idf[word] = math.log((self.corpus_size - freq + 0.5) / (freq + 0.5) + 1.0)
+
+        def get_scores(self, query_tokens: list[str]) -> list[float]:
+            scores = [0.0] * self.corpus_size
+            for q in query_tokens:
+                if q not in self.idf:
+                    continue
+                idf = self.idf[q]
+                for idx, doc_freq in enumerate(self.doc_freqs):
+                    freq = doc_freq.get(q, 0)
+                    if freq == 0:
+                        continue
+                    num = freq * (self.k1 + 1)
+                    denom = freq + self.k1 * (1 - self.b + self.b * (self.doc_lens[idx] / self.avgdl))
+                    scores[idx] += idf * (num / denom)
+            return scores
 
 from src.retrieval.vector_store import VectorStore
 
@@ -16,9 +60,11 @@ logger = logging.getLogger(__name__)
 class HybridRetriever:
     """Fuses BM25 (keyword) and vector (semantic) search results using RRF.
 
-    Reciprocal Rank Fusion (RRF) combines rankings from multiple methods
-    into a single relevance score, smoothing out individual method weaknesses.
+    Supports per-tenant BM25 index partitioning to guarantee tenant isolation,
+    prevent cross-tenant IDF distortion, and provide rapid index rebuilding.
     """
+
+    _MAX_INDEX_FILE_BYTES = 500 * 1024 * 1024
 
     def __init__(
         self,
@@ -35,139 +81,154 @@ class HybridRetriever:
         self.vector_store = vector_store
         self.alpha = alpha
         self.rrf_k = rrf_k
-        self.persist_path = (
-            Path(persist_path)
-            if persist_path
-            else vector_store.persist_path.parent
-            / f"bm25_index_{vector_store.collection_name}.json"
-        )
-        self._bm25: BM25Okapi | None = None
-        self._corpus_ids: list[str] = []
-        self._corpus_texts: list[str] = []
-        self._corpus_metadatas: list[dict[str, Any]] = []
-        self._stale = False  # Start False to allow loading from disk on query.
-        # If disk load fails or misses, search will trigger build_index.
+        try:
+            self.persist_dir = (
+                Path(persist_path).parent
+                if persist_path
+                else Path(vector_store.persist_path).parent
+            )
+        except Exception:
+            self.persist_dir = Path("./chroma_data")
+
+        # Tenant-partitioned BM25 storage: tenant_key -> dict
+        # { "bm25": BM25Okapi, "corpus_ids": [...], "corpus_texts": [...], "corpus_metadatas": [...], "stale": False }
+        self._tenant_indices: dict[str, dict[str, Any]] = {}
+
+    def _tenant_key(self, tenant_id: str | None = None) -> str:
+        return str(tenant_id).strip() if tenant_id else "__default__"
+
+    def _get_persist_path(self, tenant_id: str | None = None) -> Path:
+        key = self._tenant_key(tenant_id)
+        suffix = f"_{key}" if key != "__default__" else ""
+        col_name = getattr(self.vector_store, "collection_name", "docs")
+        return self.persist_dir / f"bm25_index_{col_name}{suffix}.json"
 
     # ------------------------------------------------------------------
     # Index building
     # ------------------------------------------------------------------
 
-    def build_index(self) -> None:
-        """Build the BM25 index from all chunks in the vector store."""
-        all_chunks = self.vector_store.get_all_chunks()
+    def build_index(self, tenant_id: str | None = None) -> None:
+        """Build the BM25 index for a specific tenant (or entire collection if None)."""
+        key = self._tenant_key(tenant_id)
+        where = {"tenant_id": tenant_id} if tenant_id and key != "__default__" else None
+
+        all_chunks = self.vector_store.get_all_chunks(where=where)
+
         if not all_chunks:
-            logger.warning("No chunks found to build BM25 index")
-            self._bm25 = BM25Okapi(corpus=[[""]])
-            self._corpus_ids = []
-            self._corpus_texts = []
-            self._corpus_metadatas = []
-            self._save_index()
+            logger.debug("No chunks found to build BM25 index for tenant: %s", key)
+            self._tenant_indices[key] = {
+                "bm25": BM25Okapi(corpus=[[""]]),
+                "corpus_ids": [],
+                "corpus_texts": [],
+                "corpus_metadatas": [],
+                "stale": False,
+            }
+            self._save_index(tenant_id)
             return
 
-        self._corpus_ids = [c["id"] for c in all_chunks]
-        self._corpus_texts = [c["document"] for c in all_chunks]
-        self._corpus_metadatas = [c["metadata"] for c in all_chunks]
+        corpus_ids = [c["id"] for c in all_chunks]
+        corpus_texts = [c["document"] for c in all_chunks]
+        corpus_metadatas = [c["metadata"] for c in all_chunks]
 
-        tokenized_corpus = [self._tokenize(doc) for doc in self._corpus_texts]
-        self._bm25 = BM25Okapi(corpus=tokenized_corpus)
-        self._stale = False
-        logger.info("BM25 index built with %d documents", len(self._corpus_ids))
-        self._save_index()
+        tokenized_corpus = [self._tokenize(doc) for doc in corpus_texts]
+        bm25_obj = BM25Okapi(corpus=tokenized_corpus)
 
-    def invalidate_index(self) -> None:
-        """Mark the BM25 index as stale, forcing a rebuild on next search.
+        self._tenant_indices[key] = {
+            "bm25": bm25_obj,
+            "corpus_ids": corpus_ids,
+            "corpus_texts": corpus_texts,
+            "corpus_metadatas": corpus_metadatas,
+            "stale": False,
+        }
+        logger.info("BM25 index built for tenant '%s' with %d documents", key, len(corpus_ids))
+        self._save_index(tenant_id)
 
-        Call this after any ingestion/deletion against the underlying vector
-        store — a count-only staleness check would miss same-count
-        replacements (e.g. re-ingesting updated documents with the same
-        chunk count).
-        """
-        self._stale = True
-        if self.persist_path and self.persist_path.exists():
+    def invalidate_index(self, tenant_id: str | None = None) -> None:
+        """Mark BM25 index as stale for a specific tenant or all tenants."""
+        if tenant_id:
+            key = self._tenant_key(tenant_id)
+            if key in self._tenant_indices:
+                self._tenant_indices[key]["stale"] = True
             try:
-                self.persist_path.unlink()
-                logger.info("Removed stale BM25 index file: %s", self.persist_path)
+                p = self._get_persist_path(tenant_id)
+                if p.exists():
+                    p.unlink()
+                    logger.debug("Removed stale BM25 index file: %s", p)
             except Exception:
-                logger.debug("Failed to remove stale BM25 index file", exc_info=True)
+                pass
+        else:
+            for key in self._tenant_indices:
+                self._tenant_indices[key]["stale"] = True
+            self._tenant_indices.clear()
+            col_name = getattr(self.vector_store, "collection_name", "docs")
+            pattern = f"bm25_index_{col_name}*.json"
+            try:
+                for p in self.persist_dir.glob(pattern):
+                    try:
+                        p.unlink()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            logger.info("Invalidated all BM25 indices")
 
-    def _save_index(self) -> None:
-        """Serialize and save the BM25 corpus to disk as JSON.
-
-        Only the raw corpus is persisted (not the BM25 object itself).
-        The BM25 index is rebuilt cheaply from the corpus on load, which
-        avoids the security risk of ``pickle.load`` and makes the index
-        portable across Python and rank_bm25 versions.
-        """
-        if self.persist_path is None:
+    def _save_index(self, tenant_id: str | None = None) -> None:
+        """Serialize and save the tenant's BM25 corpus to disk as JSON."""
+        key = self._tenant_key(tenant_id)
+        entry = self._tenant_indices.get(key)
+        if not entry:
             return
-
-        import json
 
         try:
-            import os
-
-            self.persist_path.parent.mkdir(parents=True, exist_ok=True)
+            persist_path = self._get_persist_path(tenant_id)
+            persist_path.parent.mkdir(parents=True, exist_ok=True)
             state = {
-                "version": 1,
-                "corpus_ids": self._corpus_ids,
-                "corpus_texts": self._corpus_texts,
-                "corpus_metadatas": self._corpus_metadatas,
+                "version": 2,
+                "tenant_key": key,
+                "corpus_ids": entry["corpus_ids"],
+                "corpus_texts": entry["corpus_texts"],
+                "corpus_metadatas": entry["corpus_metadatas"],
             }
-            # Use os.open with 0o600 so the corpus (which contains document text)
-            # is readable only by the owning process — not world-readable.
             flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-            fd = os.open(self.persist_path, flags, 0o600)
+            fd = os.open(persist_path, flags, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(state, f, ensure_ascii=False)
-            logger.info("Saved BM25 corpus to %s", self.persist_path)
+            logger.debug("Saved BM25 corpus for '%s' to %s", key, persist_path)
         except Exception:
-            logger.exception("Failed to save BM25 corpus to %s", self.persist_path)
+            logger.debug("Skipped saving BM25 corpus to disk (ephemeral/mock storage)")
 
-    # Maximum size in bytes we are willing to load from disk (500 MB).
-    _MAX_INDEX_FILE_BYTES = 500 * 1024 * 1024
-
-    def _load_index(self) -> bool:
-        """Load BM25 corpus from disk and rebuild the index. Returns True on success."""
-        if self.persist_path is None or not self.persist_path.exists():
-            return False
-
-        # Guard against unbounded memory usage from a corrupted/oversized index file.
+    def _load_index(self, tenant_id: str | None = None) -> bool:
+        """Load BM25 corpus for a tenant from disk and rebuild index. Returns True on success."""
+        key = self._tenant_key(tenant_id)
         try:
-            file_size = self.persist_path.stat().st_size
-        except OSError:
-            return False
-        if file_size > self._MAX_INDEX_FILE_BYTES:
-            logger.warning(
-                "BM25 index file %s is %.0f MB, exceeding the %d MB safety limit — skipping disk load",
-                self.persist_path,
-                file_size / (1024 * 1024),
-                self._MAX_INDEX_FILE_BYTES // (1024 * 1024),
-            )
-            return False
+            persist_path = self._get_persist_path(tenant_id)
+            if not persist_path.exists():
+                return False
 
-        import json
+            file_size = persist_path.stat().st_size
+            if file_size > self._MAX_INDEX_FILE_BYTES:
+                logger.warning("BM25 index file %s is too large (%d bytes)", persist_path, file_size)
+                return False
 
-        try:
-            with open(self.persist_path, encoding="utf-8") as f:
+            with open(persist_path, encoding="utf-8") as f:
                 state = json.load(f)
-            self._corpus_ids = state["corpus_ids"]
-            self._corpus_texts = state["corpus_texts"]
-            self._corpus_metadatas = state["corpus_metadatas"]
-            # Rebuild BM25 from the loaded corpus (fast, no pickle risk)
-            tokenized = [self._tokenize(doc) for doc in self._corpus_texts]
-            if not tokenized:
-                self._bm25 = BM25Okapi(corpus=[[""]])
-            else:
-                self._bm25 = BM25Okapi(corpus=tokenized)
-            self._stale = False
-            logger.info(
-                "Loaded BM25 corpus from %s and rebuilt index (%d docs)",
-                self.persist_path,
-                len(self._corpus_ids),
-            )
+            corpus_ids = state["corpus_ids"]
+            corpus_texts = state["corpus_texts"]
+            corpus_metadatas = state["corpus_metadatas"]
+
+            tokenized = [self._tokenize(doc) for doc in corpus_texts]
+            bm25_obj = BM25Okapi(corpus=tokenized) if tokenized else BM25Okapi(corpus=[[""]])
+
+            self._tenant_indices[key] = {
+                "bm25": bm25_obj,
+                "corpus_ids": corpus_ids,
+                "corpus_texts": corpus_texts,
+                "corpus_metadatas": corpus_metadatas,
+                "stale": False,
+            }
+            logger.debug("Loaded BM25 corpus from %s (%d docs)", persist_path, len(corpus_ids))
             return True
         except Exception:
-            logger.warning("Failed to load BM25 corpus from %s, will rebuild", self.persist_path)
             return False
 
     # ------------------------------------------------------------------
@@ -179,23 +240,36 @@ class HybridRetriever:
         query: str,
         k: int = 10,
         where: dict[str, str | int | float] | None = None,
+        user: Any = None,
     ) -> list[dict[str, Any]]:
-        """Perform hybrid search: BM25 + vector, fused with RRF.
+        """Perform hybrid search: BM25 + vector, fused with RRF with access filtering.
 
         Args:
             query: The search query string.
             k: Number of final results.
             where: Optional metadata filter for vector search.
+            user: Optional UserContext for permission-based candidate filtering.
 
         Returns:
             Ranked list of result dicts (id, document, metadata, score).
         """
-        # --- BM25 scores ---
-        bm25_results = self._bm25_search(query, k)
+        from src.retrieval.access_filter import build_chroma_where_clause, filter_chunks_by_access
+
+        if user is not None and where is None:
+            where = build_chroma_where_clause(user)
+
+        tenant_id = None
+        if user is not None and not getattr(user, "is_superadmin", False):
+            tenant_id = getattr(user, "tenant_id", None)
+
+        # --- BM25 scores (isolated to user's tenant) ---
+        bm25_results = self._bm25_search(query, k=k, tenant_id=tenant_id)
+        bm25_results = filter_chunks_by_access(bm25_results, user)
         bm25_rank = {r["id"]: i for i, r in enumerate(bm25_results)}
 
         # --- Vector scores ---
         vector_results = self.vector_store.similarity_search(query, k=k, where=where)
+        vector_results = filter_chunks_by_access(vector_results, user)
         vector_rank = {r["id"]: i for i, r in enumerate(vector_results)}
 
         # --- RRF fusion ---
@@ -205,7 +279,7 @@ class HybridRetriever:
         for doc_id in all_ids:
             bm25_r = bm25_rank.get(doc_id, k)  # default to worst rank
             vec_r = vector_rank.get(doc_id, k)
-            # Weighted RRF
+            # Weighted Reciprocal Rank Fusion
             score = self.alpha * (1.0 / (self.rrf_k + vec_r + 1)) + (1.0 - self.alpha) * (
                 1.0 / (self.rrf_k + bm25_r + 1)
             )
@@ -230,30 +304,34 @@ class HybridRetriever:
 
         return results
 
-    def _bm25_search(self, query: str, k: int) -> list[dict[str, Any]]:
-        """Run BM25 keyword search."""
-        current_count = self.vector_store.count()
+    def _bm25_search(self, query: str, k: int, tenant_id: str | None = None) -> list[dict[str, Any]]:
+        """Run BM25 keyword search scoped to a tenant."""
+        key = self._tenant_key(tenant_id)
+        entry = self._tenant_indices.get(key)
 
-        # Load from disk if current state is memory-cold but not stale
-        if self._bm25 is None and not self._stale:
-            self._load_index()
+        # Load from disk if cold
+        if (entry is None or entry.get("bm25") is None) and (entry is None or not entry.get("stale")):
+            self._load_index(tenant_id)
+            entry = self._tenant_indices.get(key)
 
-        # Rebuild if still missing, stale, or count differs from DB
-        if self._bm25 is None or self._stale or len(self._corpus_ids) != current_count:
-            # Try loading from disk if memory is clean but disk index matches DB count
-            if self._bm25 is None and self._load_index() and len(self._corpus_ids) == current_count:
-                pass
-            else:
-                self.build_index()
+        # Build if still missing or stale
+        if entry is None or entry.get("bm25") is None or entry.get("stale"):
+            self.build_index(tenant_id)
+            entry = self._tenant_indices.get(key)
 
-        if self._bm25 is None:
-            raise RuntimeError("BM25 index unavailable after build attempt")
+        if entry is None or entry.get("bm25") is None:
+            raise RuntimeError(f"BM25 index unavailable for tenant {key}")
 
-        if not self._corpus_ids:
+        corpus_ids = entry["corpus_ids"]
+        corpus_texts = entry["corpus_texts"]
+        corpus_metadatas = entry["corpus_metadatas"]
+        bm25_obj = entry["bm25"]
+
+        if not corpus_ids:
             return []
 
         tokenized_query = self._tokenize(query)
-        scores = self._bm25.get_scores(tokenized_query)
+        scores = bm25_obj.get_scores(tokenized_query)
 
         top_indices = sorted(
             range(len(scores)),
@@ -266,9 +344,9 @@ class HybridRetriever:
             if scores[idx] > 0:
                 results.append(
                     {
-                        "id": self._corpus_ids[idx],
-                        "document": self._corpus_texts[idx],
-                        "metadata": self._corpus_metadatas[idx],
+                        "id": corpus_ids[idx],
+                        "document": corpus_texts[idx],
+                        "metadata": corpus_metadatas[idx],
                         "score": round(float(scores[idx]), 4),
                     }
                 )
@@ -280,12 +358,5 @@ class HybridRetriever:
 
     @staticmethod
     def _tokenize(text: str) -> list[str]:
-        """Lowercase and split on non-alphanumeric boundaries, preserving Unicode letters.
-
-        Handles hyphenated terms (e.g. "GPT-4" → ["gpt", "4"]), punctuation-adjacent
-        words, and multilingual Latin-extended characters used in de/es/fr text.
-        Empty tokens are filtered out.
-        """
-        import re
-
+        """Lowercase and split on non-alphanumeric boundaries, preserving Unicode letters."""
         return [t for t in re.split(r"[^a-zA-Z0-9À-ɏ]+", text.lower()) if t]
