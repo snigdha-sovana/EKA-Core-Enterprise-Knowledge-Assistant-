@@ -1,0 +1,156 @@
+services:
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: eka-chromadb
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=False
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/v1/heartbeat || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - eka-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: eka-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-eka_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eka_secure_pass_change_in_prod}
+      POSTGRES_DB: ${POSTGRES_DB:-eka_db}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eka_user} -d ${POSTGRES_DB:-eka_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - eka-network
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: eka-redis
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - eka-network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: eka-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - eka-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eka-api
+    ports:
+      - "8000:8000"
+    environment:
+      - RAG_CHROMA_HOST=chroma
+      - RAG_CHROMA_PORT=8000
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-eka_user}:${POSTGRES_PASSWORD:-eka_secure_pass_change_in_prod}@postgres:5432/${POSTGRES_DB:-eka_db}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - RAG_LLM_PROVIDER=${RAG_LLM_PROVIDER:-groq}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-eka-insecure-secret-change-me-32chars-min}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      chroma:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - eka-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: eka-worker
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-eka_user}:${POSTGRES_PASSWORD:-eka_secure_pass_change_in_prod}@postgres:5432/${POSTGRES_DB:-eka_db}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - RAG_CHROMA_HOST=chroma
+      - RAG_CHROMA_PORT=8000
+      - RAG_LLM_PROVIDER=${RAG_LLM_PROVIDER:-groq}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eka-network
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: eka-beat
+    command: ["celery", "-A", "src.worker.celery_app", "beat", "--loglevel=info"]
+    restart: unless-stopped
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - eka-network
+
+volumes:
+  chroma_data:
+  postgres_data:
+  redis_data:
+  ollama_models:
+
+networks:
+  eka-network:
+    driver: bridge
