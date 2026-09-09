@@ -56,7 +56,7 @@ export default function Dashboard() {
         headers: { Authorization: `Bearer ${token}` }
       });
       setStats(res.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       if (err.response?.status === 401) handleLogout();
     } finally {
