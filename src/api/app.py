@@ -14,61 +14,33 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
-import secrets
 import time
 import uuid
 from collections import OrderedDict
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-try:
-    from prometheus_client import (
-        CONTENT_TYPE_LATEST,
-        CollectorRegistry,
-        Counter,
-        Histogram,
-        generate_latest,
-    )
-except ImportError:
-    CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
-
-    class CollectorRegistry:
-        pass
-
-    class _MockMetric:
-        def labels(self, *args, **kwargs):
-            return self
-
-        def inc(self, *args, **kwargs):
-            pass
-
-        def observe(self, *args, **kwargs):
-            pass
-
-    def Counter(*args, **kwargs):
-        return _MockMetric()
-
-    def Histogram(*args, **kwargs):
-        return _MockMetric()
-
-    def generate_latest(*args, **kwargs):
-        return b"# HELP rag_http_requests_total Total HTTP requests\nrag_http_requests_total 1\n"
-from datetime import datetime
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Histogram,
+    generate_latest,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.audit.service import AuditService
-from src.auth.dependencies import get_current_user, require_role, require_superadmin
+from src.auth.dependencies import get_current_user, require_role
 from src.auth.router import router as auth_router
 from src.auth.schemas import TokenPayload
 from src.cache.redis_client import close_redis, init_redis
@@ -81,6 +53,7 @@ from src.departments.router import router as departments_router
 from src.documents.router import router as documents_router
 from src.escalation.router import router as escalation_router
 from src.escalation.service import EscalationService
+from src.erp.router import router as erp_router
 from src.generation.citations import CitationFormatter
 from src.ingestion.access_control import AccessPolicy
 from src.middleware.rate_limit import RateLimitExceeded, _rate_limit_exceeded_handler, limiter
@@ -218,11 +191,13 @@ class _PrometheusMiddleware(BaseHTTPMiddleware):
 
         route = request.scope.get("route")
         path = getattr(route, "path", request.url.path)
+        path_str = str(path or request.url.path)
+        status_str = str(response.status_code)
 
         _http_requests_total.labels(
-            path=path, method=request.method, status_code=response.status_code
+            path=path_str, method=request.method, status_code=status_str
         ).inc()
-        _http_request_duration_seconds.labels(path=path, method=request.method).observe(duration)
+        _http_request_duration_seconds.labels(path=path_str, method=request.method).observe(duration)
         return response
 
 
@@ -234,12 +209,16 @@ _cors_origins: list[str] = (
     if _cors_origins_raw.strip() == "*"
     else [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 )
+if "*" not in _cors_origins:
+    for default_origin in ("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"):
+        if default_origin not in _cors_origins:
+            _cors_origins.append(default_origin)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -251,6 +230,7 @@ app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(departments_router)
 app.include_router(escalation_router)
+app.include_router(erp_router)
 
 # ---------------------------------------------------------------------------
 # Upstream Provider Error Handlers
@@ -398,8 +378,9 @@ def readyz() -> HealthResponse:
     """Readiness probe checking database access and eager-loading models."""
     try:
         try:
-            import rank_bm25  # noqa: F401
-            import sentence_transformers  # noqa: F401
+            import rank_bm25
+            import sentence_transformers
+            _ = (rank_bm25, sentence_transformers)
         except ImportError:
             pass
 
@@ -776,9 +757,10 @@ def get_ingest_job(
 
 
 @app.post("/query", response_model=QueryResponse)
+@limiter.limit(_settings.rate_limit_viewer)
 async def query(
-    request: QueryRequest,
-    raw_request: Request,
+    request: Request,
+    query_req: QueryRequest,
     response: Response,
     user: TokenPayload = Depends(require_role("viewer", "curator", "admin")),
     session: AsyncSession = Depends(get_async_session),
@@ -801,10 +783,10 @@ async def query(
 
         try:
             answer, citations, abstained, confidence_score = await pipeline.query_async(
-                request.question,
-                top_k=request.top_k,
-                use_hybrid=request.use_hybrid,
-                use_reranker=request.use_reranker,
+                query_req.question,
+                top_k=query_req.top_k,
+                use_hybrid=query_req.use_hybrid,
+                use_reranker=query_req.use_reranker,
                 user=user_context,
             )
         except ValueError as exc:
@@ -825,21 +807,21 @@ async def query(
         # Audit logging for permissioned retrieval
         try:
             chunk_ids = [c["chunk_id"] for c in CitationFormatter.to_dict(citations)]
-            client_ip = raw_request.client.host if raw_request.client else None
+            client_ip = request.client.host if request.client else None
             await AuditService.log_event(
                 session=session,
                 tenant_id=user.tenant_id,
                 user_id=user.sub,
                 action="query",
                 chunk_ids=chunk_ids,
-                query_text=request.question,
+                query_text=query_req.question,
                 ip_address=client_ip,
             )
         except Exception as exc:
             logger.warning("Could not record query audit event: %s", exc)
 
         # Token usage and retrieval mode response headers
-        mode = "hybrid+reranker" if (request.use_hybrid and request.use_reranker) else ("hybrid" if request.use_hybrid else ("reranker" if request.use_reranker else "dense"))
+        mode = "hybrid+reranker" if (query_req.use_hybrid and query_req.use_reranker) else ("hybrid" if query_req.use_hybrid else ("reranker" if query_req.use_reranker else "dense"))
         response.headers["X-RAG-Retrieval-Mode"] = mode
         response.headers["X-RAG-Prompt-Tokens"] = str(tracker.prompt_tokens)
         response.headers["X-RAG-Completion-Tokens"] = str(tracker.completion_tokens)
@@ -853,13 +835,14 @@ async def query(
                     session=session,
                     tenant_id=user.tenant_id,
                     user_id=user.sub,
-                    query_text=request.question,
+                    query_text=query_req.question,
                     confidence_score=confidence_score,
                     generator=pipeline.generator,
                 )
             except Exception as exc:
                 logger.warning("Escalation case creation failed: %s", exc)
                 escalation = {}
+
 
             forwarded_msg = (
                 "Query forwarded — not enough resources in the knowledge base. "
@@ -886,8 +869,10 @@ async def query(
 
 
 @app.post("/query/stream")
+@limiter.limit(_settings.rate_limit_viewer)
 async def query_stream(
-    request: QueryRequest,
+    request: Request,
+    query_req: QueryRequest,
     user: TokenPayload = Depends(require_role("viewer", "curator", "admin")),
     session: AsyncSession = Depends(get_async_session),
 ) -> StreamingResponse:
@@ -903,7 +888,7 @@ async def query_stream(
 
     async def _event_stream() -> AsyncGenerator[str, None]:
         try:
-            question = request.question.strip()
+            question = query_req.question.strip()
             if not question:
                 yield f"data: {json.dumps({'error': 'Question must not be empty.'})}\n\n"
                 yield "data: [DONE]\n\n"
@@ -914,13 +899,13 @@ async def query_stream(
                 yield "data: [DONE]\n\n"
                 return
 
-            k = request.top_k or _settings.top_k_final
+            k = query_req.top_k or _settings.top_k_final
 
             contexts = await asyncio.to_thread(
                 pipeline._retrieve,
                 question,
-                use_hybrid=request.use_hybrid,
-                use_reranker=request.use_reranker,
+                use_hybrid=query_req.use_hybrid,
+                use_reranker=query_req.use_reranker,
                 k=k,
                 user=user_context,
             )
@@ -935,10 +920,11 @@ async def query_stream(
                 yield "data: [DONE]\n\n"
                 return
 
-            if request.use_reranker:
+            if query_req.use_reranker:
                 contexts = await asyncio.to_thread(
                     pipeline._apply_reranker, question, contexts, top_k=k
                 )
+
 
             # Phase 4: Abstention threshold logic
             confidence_score = 0.0

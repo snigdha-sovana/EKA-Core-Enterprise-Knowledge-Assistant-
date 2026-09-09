@@ -10,7 +10,7 @@ import uuid
 from sqlalchemy import select
 
 from src.auth.security import hash_password
-from src.db.engine import AsyncSessionLocal, close_db_engine, get_engine
+from src.db import engine as db_engine
 from src.db.models.tenant import Tenant
 from src.db.models.user import User
 from src.db.models.user_tenant_role import UserTenantRole
@@ -26,10 +26,10 @@ async def seed_superadmin(
     tenant_name: str = "Default Organization",
 ) -> None:
     """Create or update default tenant, superadmin user, and role association."""
-    get_engine()
-    assert AsyncSessionLocal is not None
+    db_engine.get_engine()
+    assert db_engine.AsyncSessionLocal is not None
 
-    async with AsyncSessionLocal() as session:
+    async with db_engine.AsyncSessionLocal() as session:
         # 1. Ensure Tenant exists
         t_stmt = select(Tenant).where(Tenant.slug == tenant_slug)
         t_res = await session.execute(t_stmt)
@@ -101,7 +101,7 @@ async def seed_superadmin(
         print(f" Role        : admin")
         print("=" * 60 + "\n")
 
-    await close_db_engine()
+        await db_engine.close_db_engine()
 
 
 def main() -> None:

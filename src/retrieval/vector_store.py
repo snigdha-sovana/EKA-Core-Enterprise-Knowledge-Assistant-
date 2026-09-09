@@ -229,6 +229,15 @@ class VectorStore:
 
         retry_with_backoff(_delete_ids, retries=3, backoff_in_seconds=0.5)
 
+    def delete_where(self, where: dict[str, Any]) -> None:
+        """Remove chunks matching a metadata filter."""
+
+        def _delete_filter():
+            self._collection.delete(where=where)
+
+        retry_with_backoff(_delete_filter, retries=3, backoff_in_seconds=0.5)
+
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------

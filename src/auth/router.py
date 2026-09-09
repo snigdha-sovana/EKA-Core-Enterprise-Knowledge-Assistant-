@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -31,6 +31,7 @@ from src.db.engine import get_async_session
 from src.db.models.tenant import Tenant
 from src.db.models.user import User
 from src.db.models.user_tenant_role import UserTenantRole
+from src.middleware.rate_limit import get_auth_key, limiter
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,14 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit(settings.rate_limit_auth, key_func=get_auth_key)
 async def login(
+    request: Request,
     req: LoginRequest,
     session: AsyncSession = Depends(get_async_session),
 ) -> TokenResponse:
+
+
     """Authenticate user with email and password, returning JWT access & refresh tokens."""
     # Find user with tenant roles
     stmt = (

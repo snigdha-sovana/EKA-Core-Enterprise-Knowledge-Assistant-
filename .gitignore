@@ -13,6 +13,7 @@ build/
 # Data
 data/chroma_db/
 data/eval_results/
+data/backups/
 *.chroma/
 
 # Virtual environments

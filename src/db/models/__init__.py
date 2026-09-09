@@ -8,6 +8,7 @@ from src.db.models.document import DocumentModel
 from src.db.models.audit_log import AuditLog
 from src.db.models.department import Department
 from src.db.models.escalation_case import EscalationCase
+from src.db.models.erp_sync import ERPSyncRecord
 
 __all__ = [
     "Base",
@@ -19,5 +20,7 @@ __all__ = [
     "AuditLog",
     "Department",
     "EscalationCase",
+    "ERPSyncRecord",
 ]
+
 

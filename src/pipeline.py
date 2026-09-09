@@ -17,7 +17,7 @@ from src.config import settings
 from src.generation.citations import Citation, CitationFormatter
 from src.generation.generator import Generator
 from src.ingestion.chunker import Chunker
-from src.ingestion.loader import DocumentLoader
+from src.ingestion.loader import Document, DocumentLoader
 from src.retrieval.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -134,6 +134,8 @@ class RAGPipeline:
         access_policy: Any = None,
         tenant_id: str | None = None,
         doc_id: str | None = None,
+        department_id: str | None = None,
+        source_system: str | None = None,
     ) -> int:
         """Load, chunk, and index documents from a file or directory with ACL metadata.
 
@@ -145,6 +147,8 @@ class RAGPipeline:
             access_policy: Optional AccessPolicy object or dict.
             tenant_id: Tenant ID for isolation.
             doc_id: Unique document ID.
+            department_id: Optional department ID for departmental isolation.
+            source_system: Optional source system identifier (e.g. 'mock_erp').
 
         Returns:
             Number of chunks ingested.
@@ -161,6 +165,8 @@ class RAGPipeline:
             tenant_id=tenant_id or "default",
             doc_id=doc_id or str(uuid.uuid4()),
             policy=policy_obj,
+            department_id=department_id,
+            source_system=source_system,
         )
         if title:
             acl_meta["title"] = title
@@ -191,6 +197,88 @@ class RAGPipeline:
 
         logger.info("Ingested %d chunks from %s", total_count, source)
         return total_count
+
+    def ingest_text(
+        self,
+        content: str,
+        filename: str,
+        title: str | None = None,
+        access_policy: Any = None,
+        tenant_id: str | None = None,
+        doc_id: str | None = None,
+        department_id: str | None = None,
+        source_system: str | None = None,
+    ) -> int:
+        """Directly chunk and index in-memory text without creating temporary files.
+
+        Ideal for ERP connectors, webhooks, and programmatic synchronization.
+        """
+        from src.ingestion.access_control import AccessPolicy, build_chunk_acl_metadata
+
+        resolved_doc_id = doc_id or str(uuid.uuid4())
+        doc = Document(
+            content=content,
+            metadata={
+                "source": filename,
+                "filename": filename,
+                "filetype": ".txt",
+            },
+            doc_id=resolved_doc_id,
+        )
+
+        policy_obj = access_policy
+        if isinstance(access_policy, dict):
+            policy_obj = AccessPolicy(**access_policy)
+
+        acl_meta = build_chunk_acl_metadata(
+            tenant_id=tenant_id or "default",
+            doc_id=resolved_doc_id,
+            policy=policy_obj,
+            department_id=department_id,
+            source_system=source_system,
+        )
+        if title:
+            acl_meta["title"] = title
+
+        doc.metadata.update(acl_meta)
+        chunks = self.chunker.chunk_many([doc])
+        for chunk in chunks:
+            chunk.metadata.update(acl_meta)
+
+        chunks_by_lang: dict[str, list[Any]] = {}
+        for chunk in chunks:
+            lang = _detect_language(chunk.content)
+            chunks_by_lang.setdefault(lang, []).append(chunk)
+
+        total_count = 0
+        for lang, lang_chunks in chunks_by_lang.items():
+            vs = self._get_vector_store(lang)
+            count = vs.add_chunks(lang_chunks)
+            total_count += count
+
+            if lang in self._hybrid_retrievers:
+                self._hybrid_retrievers[lang].invalidate_index(tenant_id=tenant_id)
+
+        logger.info("Ingested %d text chunks for doc %s", total_count, resolved_doc_id)
+        return total_count
+
+    def delete_document(self, doc_id: str, tenant_id: str | None = None) -> None:
+        """Purge all chunks associated with a doc_id from all vector collections.
+
+        Also invalidates hybrid search indexes for the tenant.
+        """
+        for lang in _SUPPORTED_LANGUAGES:
+            try:
+                vs = self._get_vector_store(lang)
+                vs.delete_where({"doc_id": str(doc_id)})
+            except Exception as exc:
+                logger.warning("Could not delete doc %s from %s vector store: %s", doc_id, lang, exc)
+
+        for hr in self._hybrid_retrievers.values():
+            hr.invalidate_index(tenant_id=tenant_id)
+
+        logger.info("Deleted document %s from vector store (tenant: %s)", doc_id, tenant_id)
+
 
     # ------------------------------------------------------------------
     # Query

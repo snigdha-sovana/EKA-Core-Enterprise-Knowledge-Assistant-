@@ -39,10 +39,12 @@ def build_chunk_acl_metadata(
     doc_id: str,
     policy: AccessPolicy | None = None,
     status: str = "active",
+    department_id: str | None = None,
+    source_system: str | None = None,
 ) -> Dict[str, Any]:
     """Convert an AccessPolicy into flat key-value pairs suitable for vector store metadata."""
     p = policy or AccessPolicy()
-    return {
+    meta: Dict[str, Any] = {
         "tenant_id": str(tenant_id),
         "doc_id": str(doc_id),
         "is_public": "true" if p.is_public else "false",
@@ -50,3 +52,9 @@ def build_chunk_acl_metadata(
         "allowed_users": format_list_for_storage(p.user_ids),
         "status": status,
     }
+    if department_id:
+        meta["department_id"] = str(department_id)
+    if source_system:
+        meta["source_system"] = str(source_system)
+    return meta
+

@@ -8,7 +8,7 @@ services:
       - ANONYMIZED_TELEMETRY=False
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/v1/heartbeat || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/8000' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -74,7 +74,7 @@ services:
       dockerfile: Dockerfile
     container_name: eka-api
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - RAG_CHROMA_HOST=chroma
       - RAG_CHROMA_PORT=8000
@@ -102,6 +102,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    networks:
+      - eka-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: eka-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     networks:
       - eka-network
 

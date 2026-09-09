@@ -124,6 +124,9 @@ class Settings(BaseSettings):
     # ---------- Rate Limiting ----------
     rate_limit_viewer: str = Field(default="60/minute", validation_alias=AliasChoices("RATE_LIMIT_VIEWER", "RAG_RATE_LIMIT_VIEWER"))
     rate_limit_curator: str = Field(default="120/minute", validation_alias=AliasChoices("RATE_LIMIT_CURATOR", "RAG_RATE_LIMIT_CURATOR"))
+    rate_limit_admin: str = Field(default="300/minute", validation_alias=AliasChoices("RATE_LIMIT_ADMIN", "RAG_RATE_LIMIT_ADMIN"))
+    rate_limit_auth: str = Field(default="5/minute", validation_alias=AliasChoices("RATE_LIMIT_AUTH", "RAG_RATE_LIMIT_AUTH"))
+    rate_limit_anonymous: str = Field(default="20/minute", validation_alias=AliasChoices("RATE_LIMIT_ANONYMOUS", "RAG_RATE_LIMIT_ANONYMOUS"))
 
     # ---------- Evaluation ----------
     faithfulness_threshold: float = Field(default=0.7, validation_alias=AliasChoices("RAG_FAITHFULNESS_THRESHOLD", "FAITHFULNESS_THRESHOLD"))
