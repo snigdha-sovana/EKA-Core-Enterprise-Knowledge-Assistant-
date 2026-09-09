@@ -12,7 +12,7 @@ try:
     import chromadb
     from chromadb.config import Settings as ChromaSettings
 except ImportError:
-    chromadb = None
+    chromadb = None  # type: ignore[assignment]
 
     class ChromaSettings:  # type: ignore
         def __init__(self, *args, **kwargs):
@@ -294,7 +294,7 @@ class _ChromaEmbeddingFunction:
 
     def __init__(self, model_name: str, query_cache_size: int = 256) -> None:
         self.model_name = model_name
-        self._model = None
+        self._model: Any = None
         self._query_cache_size = query_cache_size
         self._query_cache: OrderedDict[str, list[float]] = OrderedDict()
         self._cache_hits = 0

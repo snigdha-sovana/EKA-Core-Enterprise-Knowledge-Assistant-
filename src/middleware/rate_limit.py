@@ -164,4 +164,4 @@ except ImportError:
 
             return decorator
 
-    limiter = _MockLimiter()
+    limiter = _MockLimiter()  # type: ignore[assignment]

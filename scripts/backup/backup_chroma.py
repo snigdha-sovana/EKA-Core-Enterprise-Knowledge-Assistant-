@@ -51,10 +51,11 @@ def run_chroma_backup(output_dir: Path, retention_days: int = 7) -> Path:
     try:
         import chromadb
 
+        chroma_port = int(settings.chroma_port or 8000)
         if settings.chroma_host and settings.chroma_host not in ("localhost", "127.0.0.1"):
-            client = chromadb.HttpClient(host=settings.chroma_host, port=settings.chroma_port)
+            client = chromadb.HttpClient(host=settings.chroma_host, port=chroma_port)
         else:
-            client = chromadb.HttpClient(host="127.0.0.1", port=settings.chroma_port)
+            client = chromadb.HttpClient(host="127.0.0.1", port=chroma_port)
 
         collections = client.list_collections()
         for col in collections:

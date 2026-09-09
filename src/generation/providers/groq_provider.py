@@ -6,6 +6,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from src.config import settings
 from src.utils.retry import async_retry_with_backoff, retry_with_backoff
@@ -41,7 +42,7 @@ class GroqProvider:
             raise ImportError("groq package required. Install with: pip install groq") from None
 
         client = Groq(api_key=self.api_key, timeout=self.timeout)
-        messages: list[dict[str, str]] = []
+        messages: list[Any] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
@@ -81,7 +82,7 @@ class GroqProvider:
             raise ImportError("groq package required. Install with: pip install groq") from None
 
         client = AsyncGroq(api_key=self.api_key, timeout=self.timeout)
-        messages: list[dict[str, str]] = []
+        messages: list[Any] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
@@ -121,12 +122,12 @@ class GroqProvider:
             raise ImportError("groq package required. Install with: pip install groq") from None
 
         client = AsyncGroq(api_key=self.api_key, timeout=self.timeout)
-        messages: list[dict[str, str]] = []
+        messages: list[Any] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        stream_resp = await client.chat.completions.create(
+        stream_resp: Any = await client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temperature,

@@ -40,7 +40,7 @@ check_untyped_defs = true
 exclude = ["tests/", "build/"]
 
 [[tool.mypy.overrides]]
-module = ["numpy", "numpy.*"]
+module = ["numpy", "numpy.*", "src.db.models.*"]
 ignore_errors = true
 
 [tool.pytest.ini_options]

@@ -136,7 +136,7 @@ async def login(
         refresh_token=refresh_token,
         token_type="bearer",
         expires_in=settings.jwt_expiry_minutes * 60,
-        tenant_id=target_tenant_id,
+        tenant_id=str(target_tenant_id or ""),
         roles=user_roles,
     )
 

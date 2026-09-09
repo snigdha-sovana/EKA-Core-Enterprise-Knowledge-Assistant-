@@ -47,7 +47,7 @@ async def _run_all_tenants_reconciliation(
     assert AsyncSessionLocal is not None
 
     async with AsyncSessionLocal() as session:
-        stmt = select(Tenant.tenant_id).where(Tenant.is_active == True)  # noqa: E712
+        stmt = select(Tenant.tenant_id).where(Tenant.status == "active")
         res = await session.execute(stmt)
         tenant_ids = [str(t) for t in res.scalars().all()]
 

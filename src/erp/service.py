@@ -399,7 +399,7 @@ class ERPSyncService:
             .group_by(Department.name)
         )
         dept_res = await session.execute(dept_stmt)
-        dept_counts = dict(dept_res.all())
+        dept_counts: dict[str, int] = {str(r[0]): int(r[1]) for r in dept_res.all()}
 
         return {
             "tenant_id": str(tenant_id),

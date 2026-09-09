@@ -9,7 +9,7 @@ try:
     import redis.asyncio as aioredis
     from redis.exceptions import ConnectionError, RedisError, TimeoutError
 except ImportError:
-    aioredis = None
+    aioredis = None  # type: ignore[assignment]
 
     class RedisError(Exception):  # type: ignore[no-redef]
         pass
