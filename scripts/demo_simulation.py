@@ -12,7 +12,6 @@ Demonstrates all production-grade backend capabilities:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import sys
@@ -43,7 +42,6 @@ MAGENTA = "\033[95m"
 RESET = "\033[0m"
 
 BASE_URL = os.environ.get("EKA_API_URL", "http://localhost:8000")
-
 
 
 def print_banner(text: str, color=CYAN):
@@ -96,7 +94,9 @@ def act_1_health_and_metrics():
     except Exception as e:
         print(f"  -> {YELLOW}Metrics probe warning: {e}{RESET}")
 
-    print(f"\n{GREEN}[OK] Act 1 Complete: Backend is healthy, observable, and production-ready.{RESET}")
+    print(
+        f"\n{GREEN}[OK] Act 1 Complete: Backend is healthy, observable, and production-ready.{RESET}"
+    )
 
 
 def act_2_rbac_and_zero_trust():
@@ -136,8 +136,10 @@ def act_3_explicit_abstention():
         "Shows how EKA detects ungrounded queries and refrains from hallucinating answers.",
     )
 
-    unsupported_query = "Can I claim accommodation above the normal limit for a client visit to Zurich next month?"
-    print(f"  Employee Prompt: {YELLOW}\"{unsupported_query}\"{RESET}\n")
+    unsupported_query = (
+        "Can I claim accommodation above the normal limit for a client visit to Zurich next month?"
+    )
+    print(f'  Employee Prompt: {YELLOW}"{unsupported_query}"{RESET}\n')
 
     print("  Executing Hybrid Retrieval (Dense Vector + BM25 Lexical + Cross-Encoder)...")
     time.sleep(1.0)
@@ -145,21 +147,37 @@ def act_3_explicit_abstention():
     # Simulated backend evaluation flow
     confidence = 0.42
     threshold = 0.65
-    print(f"  -> Dense & Sparse Top-K Retrieved: Travel Policy v3.2 (Hotel cap $200/night)")
-    print(f"  -> Policy Coverage Evaluation: No rule found for high-cost metro client visits")
-    print(f"  -> Cross-Encoder Confidence Score: {RED}{confidence:.2f}{RESET} (Required Threshold: {threshold:.2f})")
+    print("  -> Dense & Sparse Top-K Retrieved: Travel Policy v3.2 (Hotel cap $200/night)")
+    print("  -> Policy Coverage Evaluation: No rule found for high-cost metro client visits")
+    print(
+        f"  -> Cross-Encoder Confidence Score: {RED}{confidence:.2f}{RESET} (Required Threshold: {threshold:.2f})"
+    )
     print(f"  -> Decision: {RED}{BOLD}ABSTAIN (Prevent Hallucination){RESET}")
-    print(f"\n  EKA Assistant Response:")
+    print("\n  EKA Assistant Response:")
     print(f"  {RED}+------------------------------------------------------------------+{RESET}")
-    print(f"  {RED}|{RESET}  {BOLD}INSUFFICIENT EVIDENCE DETECTED{RESET}                                  {RED}|{RESET}")
-    print(f"  {RED}|{RESET}  The current Travel Policy v3.2 sets a strict $200/night hotel cap {RED}|{RESET}")
-    print(f"  {RED}|{RESET}  but does not specify exceptions for Zurich client visits.         {RED}|{RESET}")
-    print(f"  {RED}|{RESET}  To protect policy compliance, I have not generated an assumption. {RED}|{RESET}")
-    print(f"  {RED}|{RESET}                                                                    {RED}|{RESET}")
-    print(f"  {RED}|{RESET}  [Action]: Forwarded to Finance Department (Case ID: FIN-2026-0142)  {RED}|{RESET}")
+    print(
+        f"  {RED}|{RESET}  {BOLD}INSUFFICIENT EVIDENCE DETECTED{RESET}                                  {RED}|{RESET}"
+    )
+    print(
+        f"  {RED}|{RESET}  The current Travel Policy v3.2 sets a strict $200/night hotel cap {RED}|{RESET}"
+    )
+    print(
+        f"  {RED}|{RESET}  but does not specify exceptions for Zurich client visits.         {RED}|{RESET}"
+    )
+    print(
+        f"  {RED}|{RESET}  To protect policy compliance, I have not generated an assumption. {RED}|{RESET}"
+    )
+    print(
+        f"  {RED}|{RESET}                                                                    {RED}|{RESET}"
+    )
+    print(
+        f"  {RED}|{RESET}  [Action]: Forwarded to Finance Department (Case ID: FIN-2026-0142)  {RED}|{RESET}"
+    )
     print(f"  {RED}+------------------------------------------------------------------+{RESET}")
 
-    print(f"\n{GREEN}[OK] Act 3 Complete: Hallucination prevented. Ticket FIN-2026-0142 created in PostgreSQL.{RESET}")
+    print(
+        f"\n{GREEN}[OK] Act 3 Complete: Hallucination prevented. Ticket FIN-2026-0142 created in PostgreSQL.{RESET}"
+    )
 
 
 def act_4_continuous_learning_loop():
@@ -173,40 +191,64 @@ def act_4_continuous_learning_loop():
     print("  Priya Sharma reviews FIN-2026-0142 in the NexoraERP Finance Admin Portal.")
     print("  Resolution Action: 'Approve Exception (Tier-1 Client)'")
     print("  Knowledge Amendment: Travel Policy v3.3 Ratification:")
-    print("    \"Employees visiting Tier-1 clients in high-cost metro locations")
-    print("     (including Zurich, London, NYC) are authorized up to $280/night.\"")
+    print('    "Employees visiting Tier-1 clients in high-cost metro locations')
+    print('     (including Zurich, London, NYC) are authorized up to $280/night."')
     print("  Checkbox Checked: [x] 'Propose this response as Company Knowledge update'\n")
 
     print(f"{BLUE}[Phase 4B: Hot Vector Ingestion & Index Sync]{RESET}")
     for pct in [25, 50, 75, 100]:
         time.sleep(0.3)
         print(f"  -> ChromaDB Ingestion Pipeline: Processing chunk embeddings... {pct}%")
-    print(f"  -> {GREEN}Chunk 'FIN-DOC-2026-0142-AMEND' committed to vector store partition 'company_finance'.{RESET}\n")
+    print(
+        f"  -> {GREEN}Chunk 'FIN-DOC-2026-0142-AMEND' committed to vector store partition 'company_finance'.{RESET}\n"
+    )
 
     print(f"{BLUE}[Phase 4C: Employee Re-Asks the Exact Same Question]{RESET}")
-    reask_query = "Can I claim accommodation above the normal limit for a client visit to Zurich next month?"
-    print(f"  Employee Prompt: {YELLOW}\"{reask_query}\"{RESET}")
+    reask_query = (
+        "Can I claim accommodation above the normal limit for a client visit to Zurich next month?"
+    )
+    print(f'  Employee Prompt: {YELLOW}"{reask_query}"{RESET}')
     time.sleep(0.8)
 
     new_confidence = 0.94
-    print(f"  -> Vector Retrieval: MATCH found in 'Travel Policy v3.3 (Ratified)'")
+    print("  -> Vector Retrieval: MATCH found in 'Travel Policy v3.3 (Ratified)'")
     print(f"  -> Confidence Score: {GREEN}{new_confidence:.2f}{RESET} (Exceeds threshold 0.65)")
     print(f"  -> Decision: {GREEN}{BOLD}ANSWER WITH VERIFIED CITATION (Zero Abstention){RESET}\n")
 
-    print(f"  EKA Assistant Response:")
+    print("  EKA Assistant Response:")
     print(f"  {GREEN}+------------------------------------------------------------------+{RESET}")
-    print(f"  {GREEN}|{RESET}  {BOLD}Yes, you can claim up to $280/night for Zurich.{RESET}                 {GREEN}|{RESET}")
-    print(f"  {GREEN}|{RESET}                                                                    {GREEN}|{RESET}")
-    print(f"  {GREEN}|{RESET}  Under the newly ratified Travel Policy v3.3 (Tier-1 Client Metro   {GREEN}|{RESET}")
-    print(f"  {GREEN}|{RESET}  Exception), Zurich is classified as a Tier-1 high-cost zone with   {GREEN}|{RESET}")
-    print(f"  {GREEN}|{RESET}  an authorized allowance of up to $280/night upon VP pre-approval. {GREEN}|{RESET}")
-    print(f"  {GREEN}|{RESET}                                                                    {GREEN}|{RESET}")
-    print(f"  {GREEN}|{RESET}  {CYAN}Citations:{RESET}                                                        {GREEN}|{RESET}")
-    print(f"  {GREEN}|{RESET}  [1] Travel_Policy_v3.3.pdf (Section 4.2 - Metro Exceptions)       {GREEN}|{RESET}")
-    print(f"  {GREEN}|{RESET}  [2] FIN-2026-0142 Executive Ratification (Finance Lead Priya S.)   {GREEN}|{RESET}")
+    print(
+        f"  {GREEN}|{RESET}  {BOLD}Yes, you can claim up to $280/night for Zurich.{RESET}                 {GREEN}|{RESET}"
+    )
+    print(
+        f"  {GREEN}|{RESET}                                                                    {GREEN}|{RESET}"
+    )
+    print(
+        f"  {GREEN}|{RESET}  Under the newly ratified Travel Policy v3.3 (Tier-1 Client Metro   {GREEN}|{RESET}"
+    )
+    print(
+        f"  {GREEN}|{RESET}  Exception), Zurich is classified as a Tier-1 high-cost zone with   {GREEN}|{RESET}"
+    )
+    print(
+        f"  {GREEN}|{RESET}  an authorized allowance of up to $280/night upon VP pre-approval. {GREEN}|{RESET}"
+    )
+    print(
+        f"  {GREEN}|{RESET}                                                                    {GREEN}|{RESET}"
+    )
+    print(
+        f"  {GREEN}|{RESET}  {CYAN}Citations:{RESET}                                                        {GREEN}|{RESET}"
+    )
+    print(
+        f"  {GREEN}|{RESET}  [1] Travel_Policy_v3.3.pdf (Section 4.2 - Metro Exceptions)       {GREEN}|{RESET}"
+    )
+    print(
+        f"  {GREEN}|{RESET}  [2] FIN-2026-0142 Executive Ratification (Finance Lead Priya S.)   {GREEN}|{RESET}"
+    )
     print(f"  {GREEN}+------------------------------------------------------------------+{RESET}")
 
-    print(f"\n{GREEN}[OK] Act 4 Complete: Full RAG continuous learning loop demonstrated end-to-end!{RESET}")
+    print(
+        f"\n{GREEN}[OK] Act 4 Complete: Full RAG continuous learning loop demonstrated end-to-end!{RESET}"
+    )
 
 
 def act_5_rate_limiting():
@@ -231,7 +273,9 @@ def act_5_rate_limiting():
             if res.status_code == 429:
                 blocked_count += 1
                 retry_after = res.headers.get("Retry-After", "60")
-                print(f"  [Req {i}] -> {RED}HTTP 429 Too Many Requests{RESET} (Retry-After: {retry_after}s)")
+                print(
+                    f"  [Req {i}] -> {RED}HTTP 429 Too Many Requests{RESET} (Retry-After: {retry_after}s)"
+                )
             elif res.status_code == 401:
                 success_count += 1
                 print(f"  [Req {i}] -> HTTP 401 Unauthorized (Auth failed, quota decremented)")
@@ -241,7 +285,6 @@ def act_5_rate_limiting():
         except Exception as e:
             print(f"  [Req {i}] -> Connection error: {e}")
         time.sleep(0.05)
-
 
     print(f"\n  Rate Limiter Summary: {success_count} allowed, {blocked_count} rate-limited.")
     print(f"{GREEN}[OK] Act 5 Complete: DoS protection & brute-force prevention verified.{RESET}")
@@ -269,7 +312,9 @@ def act_6_disaster_recovery():
 
     # Find created bundle
     backup_dir = root_dir / "data" / "backups"
-    bundles = sorted(backup_dir.glob("eka_dr_bundle_*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
+    bundles = sorted(
+        backup_dir.glob("eka_dr_bundle_*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
     if bundles:
         latest = bundles[0]
         print(f"\n  Latest Bundle Created: {latest.name} ({latest.stat().st_size / 1024:.1f} KB)")
@@ -286,13 +331,16 @@ def act_6_disaster_recovery():
         for line in rest_res.stdout.strip().split("\n")[-5:]:
             print(f"    {line}")
 
-    print(f"\n{GREEN}[OK] Act 6 Complete: Cryptographically verified disaster recovery validated.{RESET}")
-
+    print(
+        f"\n{GREEN}[OK] Act 6 Complete: Cryptographically verified disaster recovery validated.{RESET}"
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description="EKA Production RAG Backend Interview Simulation")
-    parser.add_argument("--act", type=int, choices=[1, 2, 3, 4, 5, 6], help="Run a specific act (1-6)")
+    parser.add_argument(
+        "--act", type=int, choices=[1, 2, 3, 4, 5, 6], help="Run a specific act (1-6)"
+    )
     parser.add_argument("--auto", action="store_true", help="Run all acts without pausing")
     args = parser.parse_args()
 
@@ -315,14 +363,16 @@ def main():
                 func()
         return
 
-    for i, (num, name, func) in enumerate(acts, start=1):
+    for i, (_num, _name, func) in enumerate(acts, start=1):
         func()
         if not args.auto and i < len(acts):
-            pause_prompt(f"Press [Enter] to proceed to Act {i+1}...")
+            pause_prompt(f"Press [Enter] to proceed to Act {i + 1}...")
 
     print_banner("SIMULATION COMPLETED SUCCESSFULLY", color=GREEN)
     print("All enterprise capabilities were executed with live metrics and proofs.")
-    print("Reference: docs/INTERVIEW_DEMO_PLAYBOOK.md for full interview scripts and talking points.\n")
+    print(
+        "Reference: docs/INTERVIEW_DEMO_PLAYBOOK.md for full interview scripts and talking points.\n"
+    )
 
 
 if __name__ == "__main__":

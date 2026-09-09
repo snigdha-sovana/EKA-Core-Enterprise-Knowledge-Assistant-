@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import timedelta
-from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -61,49 +59,57 @@ def test_user(test_tenant: Tenant) -> User:
 @pytest.fixture
 def viewer_token() -> str:
     """JWT access token with viewer role."""
-    return create_access_token({
-        "sub": TEST_USER_ID,
-        "email": TEST_USER_EMAIL,
-        "tenant_id": TEST_TENANT_ID,
-        "roles": ["viewer"],
-        "is_superadmin": False,
-    })
+    return create_access_token(
+        {
+            "sub": TEST_USER_ID,
+            "email": TEST_USER_EMAIL,
+            "tenant_id": TEST_TENANT_ID,
+            "roles": ["viewer"],
+            "is_superadmin": False,
+        }
+    )
 
 
 @pytest.fixture
 def curator_token() -> str:
     """JWT access token with curator role."""
-    return create_access_token({
-        "sub": TEST_USER_ID,
-        "email": TEST_USER_EMAIL,
-        "tenant_id": TEST_TENANT_ID,
-        "roles": ["curator"],
-        "is_superadmin": False,
-    })
+    return create_access_token(
+        {
+            "sub": TEST_USER_ID,
+            "email": TEST_USER_EMAIL,
+            "tenant_id": TEST_TENANT_ID,
+            "roles": ["curator"],
+            "is_superadmin": False,
+        }
+    )
 
 
 @pytest.fixture
 def admin_token() -> str:
     """JWT access token with admin role."""
-    return create_access_token({
-        "sub": TEST_USER_ID,
-        "email": TEST_USER_EMAIL,
-        "tenant_id": TEST_TENANT_ID,
-        "roles": ["admin"],
-        "is_superadmin": False,
-    })
+    return create_access_token(
+        {
+            "sub": TEST_USER_ID,
+            "email": TEST_USER_EMAIL,
+            "tenant_id": TEST_TENANT_ID,
+            "roles": ["admin"],
+            "is_superadmin": False,
+        }
+    )
 
 
 @pytest.fixture
 def superadmin_token() -> str:
     """JWT access token with superadmin role."""
-    return create_access_token({
-        "sub": TEST_USER_ID,
-        "email": "superadmin@example.com",
-        "tenant_id": str(uuid.UUID(int=0)),
-        "roles": ["admin"],
-        "is_superadmin": True,
-    })
+    return create_access_token(
+        {
+            "sub": TEST_USER_ID,
+            "email": "superadmin@example.com",
+            "tenant_id": str(uuid.UUID(int=0)),
+            "roles": ["admin"],
+            "is_superadmin": True,
+        }
+    )
 
 
 @pytest.fixture
@@ -124,13 +130,15 @@ def expired_token() -> str:
 @pytest.fixture
 def valid_refresh_token() -> str:
     """Valid JWT refresh token."""
-    return create_refresh_token({
-        "sub": TEST_USER_ID,
-        "email": TEST_USER_EMAIL,
-        "tenant_id": TEST_TENANT_ID,
-        "roles": ["viewer"],
-        "is_superadmin": False,
-    })
+    return create_refresh_token(
+        {
+            "sub": TEST_USER_ID,
+            "email": TEST_USER_EMAIL,
+            "tenant_id": TEST_TENANT_ID,
+            "roles": ["viewer"],
+            "is_superadmin": False,
+        }
+    )
 
 
 @pytest.fixture

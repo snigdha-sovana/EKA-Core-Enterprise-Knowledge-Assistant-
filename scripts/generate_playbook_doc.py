@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
+from docx.shared import Inches, Pt, RGBColor
 
 
 def create_docx(md_path: Path, output_path: Path):
@@ -23,13 +23,13 @@ def create_docx(md_path: Path, output_path: Path):
         section.right_margin = Inches(0.8)
 
     # Styles
-    style_normal = doc.styles['Normal']
+    style_normal = doc.styles["Normal"]
     font = style_normal.font
-    font.name = 'Segoe UI'
+    font.name = "Segoe UI"
     font.size = Pt(10.5)
-    font.color.rgb = RGBColor(0x1e, 0x29, 0x3b)  # Slate 800
+    font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)  # Slate 800
 
-    text = md_path.read_text(encoding='utf-8')
+    text = md_path.read_text(encoding="utf-8")
     lines = text.splitlines()
 
     i = 0
@@ -40,10 +40,10 @@ def create_docx(md_path: Path, output_path: Path):
         line = lines[i]
 
         # Handle fenced code blocks
-        if line.startswith('```'):
+        if line.startswith("```"):
             if in_code_block:
                 # Flush code block
-                code_text = '\n'.join(code_lines)
+                code_text = "\n".join(code_lines)
                 table = doc.add_table(rows=1, cols=1)
                 table.alignment = WD_TABLE_ALIGNMENT.CENTER
                 cell = table.cell(0, 0)
@@ -53,9 +53,9 @@ def create_docx(md_path: Path, output_path: Path):
                 p.paragraph_format.space_before = Pt(4)
                 p.paragraph_format.space_after = Pt(4)
                 run = p.add_run(code_text)
-                run.font.name = 'Consolas'
+                run.font.name = "Consolas"
                 run.font.size = Pt(9)
-                run.font.color.rgb = RGBColor(0x0f, 0x17, 0x2a)
+                run.font.color.rgb = RGBColor(0x0F, 0x17, 0x2A)
                 in_code_block = False
                 code_lines = []
             else:
@@ -72,47 +72,47 @@ def create_docx(md_path: Path, output_path: Path):
         stripped = line.strip()
 
         # Headings
-        if stripped.startswith('# '):
+        if stripped.startswith("# "):
             p = doc.add_paragraph()
             p.paragraph_format.space_before = Pt(16)
             p.paragraph_format.space_after = Pt(6)
             p.paragraph_format.keep_with_next = True
             run = p.add_run(stripped[2:])
-            run.font.name = 'Segoe UI'
+            run.font.name = "Segoe UI"
             run.font.size = Pt(22)
             run.bold = True
-            run.font.color.rgb = RGBColor(0x1e, 0x40, 0xaf)  # Royal Blue
-        elif stripped.startswith('## '):
+            run.font.color.rgb = RGBColor(0x1E, 0x40, 0xAF)  # Royal Blue
+        elif stripped.startswith("## "):
             p = doc.add_paragraph()
             p.paragraph_format.space_before = Pt(14)
             p.paragraph_format.space_after = Pt(4)
             p.paragraph_format.keep_with_next = True
             run = p.add_run(stripped[3:])
-            run.font.name = 'Segoe UI'
+            run.font.name = "Segoe UI"
             run.font.size = Pt(15)
             run.bold = True
-            run.font.color.rgb = RGBColor(0x25, 0x63, 0xeb)
-        elif stripped.startswith('### '):
+            run.font.color.rgb = RGBColor(0x25, 0x63, 0xEB)
+        elif stripped.startswith("### "):
             p = doc.add_paragraph()
             p.paragraph_format.space_before = Pt(10)
             p.paragraph_format.space_after = Pt(2)
             p.paragraph_format.keep_with_next = True
             run = p.add_run(stripped[4:])
-            run.font.name = 'Segoe UI'
+            run.font.name = "Segoe UI"
             run.font.size = Pt(12)
             run.bold = True
-            run.font.color.rgb = RGBColor(0x0f, 0x17, 0x2a)
-        elif stripped.startswith('#### '):
+            run.font.color.rgb = RGBColor(0x0F, 0x17, 0x2A)
+        elif stripped.startswith("#### "):
             p = doc.add_paragraph()
             p.paragraph_format.space_before = Pt(8)
             p.paragraph_format.space_after = Pt(2)
             p.paragraph_format.keep_with_next = True
             run = p.add_run(stripped[5:])
-            run.font.name = 'Segoe UI'
+            run.font.name = "Segoe UI"
             run.font.size = Pt(11)
             run.bold = True
             run.font.color.rgb = RGBColor(0x47, 0x55, 0x69)
-        elif stripped.startswith('> '):
+        elif stripped.startswith("> "):
             # Callout / Quote block
             table = doc.add_table(rows=1, cols=1)
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -122,49 +122,51 @@ def create_docx(md_path: Path, output_path: Path):
             p = cell.paragraphs[0]
             p.paragraph_format.space_before = Pt(4)
             p.paragraph_format.space_after = Pt(4)
-            quote_text = stripped[2:].replace('*', '').replace('"', '')
+            quote_text = stripped[2:].replace("*", "").replace('"', "")
             run = p.add_run(f'"{quote_text}"')
             run.italic = True
             run.font.size = Pt(10)
-            run.font.color.rgb = RGBColor(0x1e, 0x3a, 0x8a)
-        elif stripped.startswith('- ') or stripped.startswith('* '):
-            p = doc.add_paragraph(style='List Bullet')
+            run.font.color.rgb = RGBColor(0x1E, 0x3A, 0x8A)
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            p = doc.add_paragraph(style="List Bullet")
             p.paragraph_format.space_before = Pt(2)
             p.paragraph_format.space_after = Pt(2)
             # Add runs supporting bold
-            parts = re.split(r'(\*\*.*?\*\*)', stripped[2:])
+            parts = re.split(r"(\*\*.*?\*\*)", stripped[2:])
             for part in parts:
-                if part.startswith('**') and part.endswith('**'):
+                if part.startswith("**") and part.endswith("**"):
                     run = p.add_run(part[2:-2])
                     run.bold = True
                 else:
                     p.add_run(part)
-        elif re.match(r'^\d+\.\s', stripped):
-            p = doc.add_paragraph(style='List Number')
+        elif re.match(r"^\d+\.\s", stripped):
+            p = doc.add_paragraph(style="List Number")
             p.paragraph_format.space_before = Pt(2)
             p.paragraph_format.space_after = Pt(2)
-            m = re.match(r'^\d+\.\s(.*)', stripped)
+            m = re.match(r"^\d+\.\s(.*)", stripped)
             text_val = m.group(1) if m else stripped
-            parts = re.split(r'(\*\*.*?\*\*)', text_val)
+            parts = re.split(r"(\*\*.*?\*\*)", text_val)
             for part in parts:
-                if part.startswith('**') and part.endswith('**'):
+                if part.startswith("**") and part.endswith("**"):
                     run = p.add_run(part[2:-2])
                     run.bold = True
                 else:
                     p.add_run(part)
-        elif stripped == '---':
+        elif stripped == "---":
             p = doc.add_paragraph()
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(6)
-            run = p.add_run('__________________________________________________________________________')
-            run.font.color.rgb = RGBColor(0xcc, 0xd4, 0xdd)
+            run = p.add_run(
+                "__________________________________________________________________________"
+            )
+            run.font.color.rgb = RGBColor(0xCC, 0xD4, 0xDD)
         elif stripped:
             p = doc.add_paragraph()
             p.paragraph_format.space_before = Pt(3)
             p.paragraph_format.space_after = Pt(3)
-            parts = re.split(r'(\*\*.*?\*\*)', stripped)
+            parts = re.split(r"(\*\*.*?\*\*)", stripped)
             for part in parts:
-                if part.startswith('**') and part.endswith('**'):
+                if part.startswith("**") and part.endswith("**"):
                     run = p.add_run(part[2:-2])
                     run.bold = True
                 else:
@@ -176,9 +178,8 @@ def create_docx(md_path: Path, output_path: Path):
     print(f"[OK] Created Word document: {output_path}")
 
 
-
 def create_html(md_path: Path, output_path: Path):
-    content = md_path.read_text(encoding='utf-8')
+    content = md_path.read_text(encoding="utf-8")
 
     # Basic markdown to HTML conversion
     html_lines = []
@@ -186,9 +187,9 @@ def create_html(md_path: Path, output_path: Path):
     in_list = False
 
     for line in content.splitlines():
-        if line.startswith('```'):
+        if line.startswith("```"):
             if in_code:
-                html_lines.append('</code></pre>')
+                html_lines.append("</code></pre>")
                 in_code = False
             else:
                 lang = line[3:].strip()
@@ -197,58 +198,56 @@ def create_html(md_path: Path, output_path: Path):
             continue
 
         if in_code:
-            escaped = (line.replace('&', '&amp;')
-                           .replace('<', '&lt;')
-                           .replace('>', '&gt;'))
+            escaped = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             html_lines.append(escaped)
             continue
 
         stripped = line.strip()
 
-        if stripped.startswith('# '):
-            html_lines.append(f'<h1>{stripped[2:]}</h1>')
-        elif stripped.startswith('## '):
-            html_lines.append(f'<h2>{stripped[3:]}</h2>')
-        elif stripped.startswith('### '):
-            html_lines.append(f'<h3>{stripped[4:]}</h3>')
-        elif stripped.startswith('#### '):
-            html_lines.append(f'<h4>{stripped[5:]}</h4>')
-        elif stripped.startswith('> '):
-            html_lines.append(f'<blockquote>{stripped[2:]}</blockquote>')
-        elif stripped.startswith('- ') or stripped.startswith('* '):
+        if stripped.startswith("# "):
+            html_lines.append(f"<h1>{stripped[2:]}</h1>")
+        elif stripped.startswith("## "):
+            html_lines.append(f"<h2>{stripped[3:]}</h2>")
+        elif stripped.startswith("### "):
+            html_lines.append(f"<h3>{stripped[4:]}</h3>")
+        elif stripped.startswith("#### "):
+            html_lines.append(f"<h4>{stripped[5:]}</h4>")
+        elif stripped.startswith("> "):
+            html_lines.append(f"<blockquote>{stripped[2:]}</blockquote>")
+        elif stripped.startswith("- ") or stripped.startswith("* "):
             if not in_list:
-                html_lines.append('<ul>')
+                html_lines.append("<ul>")
                 in_list = True
-            item_text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', stripped[2:])
-            html_lines.append(f'<li>{item_text}</li>')
-        elif re.match(r'^\d+\.\s', stripped):
+            item_text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[2:])
+            html_lines.append(f"<li>{item_text}</li>")
+        elif re.match(r"^\d+\.\s", stripped):
             if not in_list:
-                html_lines.append('<ol>')
+                html_lines.append("<ol>")
                 in_list = True
-            item_text = re.sub(r'^\d+\.\s', '', stripped)
-            item_text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', item_text)
-            html_lines.append(f'<li>{item_text}</li>')
-        elif stripped == '---':
+            item_text = re.sub(r"^\d+\.\s", "", stripped)
+            item_text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", item_text)
+            html_lines.append(f"<li>{item_text}</li>")
+        elif stripped == "---":
             if in_list:
-                html_lines.append('</ul>')
+                html_lines.append("</ul>")
                 in_list = False
-            html_lines.append('<hr/>')
+            html_lines.append("<hr/>")
         elif stripped:
             if in_list:
-                html_lines.append('</ul>')
+                html_lines.append("</ul>")
                 in_list = False
-            p_text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', stripped)
-            p_text = re.sub(r'`(.*?)`', r'<code>\1</code>', p_text)
-            html_lines.append(f'<p>{p_text}</p>')
+            p_text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped)
+            p_text = re.sub(r"`(.*?)`", r"<code>\1</code>", p_text)
+            html_lines.append(f"<p>{p_text}</p>")
         else:
             if in_list:
-                html_lines.append('</ul>')
+                html_lines.append("</ul>")
                 in_list = False
 
     if in_list:
-        html_lines.append('</ul>')
+        html_lines.append("</ul>")
 
-    body_html = '\n'.join(html_lines)
+    body_html = "\n".join(html_lines)
 
     html_template = f"""<!DOCTYPE html>
 <html lang="en">
@@ -394,16 +393,15 @@ def create_html(md_path: Path, output_path: Path):
 </body>
 </html>"""
 
-    output_path.write_text(html_template, encoding='utf-8')
+    output_path.write_text(html_template, encoding="utf-8")
     print(f"[OK] Created HTML document: {output_path}")
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     root = Path(__file__).resolve().parent.parent
-    md_file = root / 'docs' / 'INTERVIEW_DEMO_PLAYBOOK.md'
-    docx_file = root / 'docs' / 'INTERVIEW_DEMO_PLAYBOOK.docx'
-    html_file = root / 'docs' / 'INTERVIEW_DEMO_PLAYBOOK.html'
+    md_file = root / "docs" / "INTERVIEW_DEMO_PLAYBOOK.md"
+    docx_file = root / "docs" / "INTERVIEW_DEMO_PLAYBOOK.docx"
+    html_file = root / "docs" / "INTERVIEW_DEMO_PLAYBOOK.html"
 
     create_docx(md_file, docx_file)
     create_html(md_file, html_file)

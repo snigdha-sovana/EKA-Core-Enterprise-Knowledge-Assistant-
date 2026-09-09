@@ -19,14 +19,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import get_current_user, require_role
+from src.auth.dependencies import require_role
 from src.auth.schemas import TokenPayload
 from src.db.engine import get_async_session
 from src.db.models.department import Department
@@ -48,7 +47,7 @@ class DepartmentCreate(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=128, description="Department display name")
     description: str = Field("", max_length=1024, description="Optional description")
-    owner_id: Optional[uuid.UUID] = Field(
+    owner_id: uuid.UUID | None = Field(
         None, description="User ID of the department owner (must be a tenant member)"
     )
     is_fallback: bool = Field(
@@ -60,11 +59,11 @@ class DepartmentCreate(BaseModel):
 class DepartmentUpdate(BaseModel):
     """Payload for updating an existing department (all fields optional)."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=128)
-    description: Optional[str] = Field(None, max_length=1024)
-    owner_id: Optional[uuid.UUID] = None
-    is_fallback: Optional[bool] = None
-    is_active: Optional[bool] = None
+    name: str | None = Field(None, min_length=1, max_length=128)
+    description: str | None = Field(None, max_length=1024)
+    owner_id: uuid.UUID | None = None
+    is_fallback: bool | None = None
+    is_active: bool | None = None
 
 
 class DepartmentResponse(BaseModel):
@@ -74,7 +73,7 @@ class DepartmentResponse(BaseModel):
     tenant_id: uuid.UUID
     name: str
     description: str
-    owner_id: Optional[uuid.UUID]
+    owner_id: uuid.UUID | None
     is_fallback: bool
     is_active: bool
     created_at: datetime
@@ -176,7 +175,7 @@ async def _assert_no_existing_fallback(
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=List[DepartmentResponse], summary="List departments")
+@router.get("", response_model=list[DepartmentResponse], summary="List departments")
 async def list_departments(
     tenant_id: uuid.UUID = Path(..., description="Target tenant UUID"),
     include_inactive: bool = Query(False, description="Include soft-deleted departments"),
@@ -184,7 +183,7 @@ async def list_departments(
     limit: int = Query(50, ge=1, le=200),
     user: TokenPayload = Depends(require_role("viewer", "curator", "admin")),
     session: AsyncSession = Depends(get_async_session),
-) -> List[DepartmentResponse]:
+) -> list[DepartmentResponse]:
     """Return all departments belonging to *tenant_id*."""
     await _resolve_tenant(tenant_id, user)
 
@@ -197,7 +196,12 @@ async def list_departments(
     return [DepartmentResponse.model_validate(d) for d in result.scalars().all()]
 
 
-@router.post("", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED, summary="Create department")
+@router.post(
+    "",
+    response_model=DepartmentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create department",
+)
 async def create_department(
     body: DepartmentCreate,
     tenant_id: uuid.UUID = Path(...),

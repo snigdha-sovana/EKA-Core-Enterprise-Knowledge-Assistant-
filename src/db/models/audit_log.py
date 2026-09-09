@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, List
 
 from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -45,7 +44,7 @@ class AuditLog(Base):
         nullable=True,
         index=True,
     )
-    chunk_ids: Mapped[List[str]] = mapped_column(
+    chunk_ids: Mapped[list[str]] = mapped_column(
         JSONB,
         nullable=False,
         default=list,
@@ -67,11 +66,11 @@ class AuditLog(Base):
     )
 
     # Relationships
-    tenant: Mapped["Tenant"] = relationship(
+    tenant: Mapped[Tenant] = relationship(
         "Tenant",
         foreign_keys=[tenant_id],
     )
-    user: Mapped["User | None"] = relationship(
+    user: Mapped[User | None] = relationship(
         "User",
         foreign_keys=[user_id],
     )

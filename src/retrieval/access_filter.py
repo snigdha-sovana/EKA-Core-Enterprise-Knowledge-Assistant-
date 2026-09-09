@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ class UserContext:
 
     user_id: str
     tenant_id: str
-    roles: List[str] = field(default_factory=list)
+    roles: list[str] = field(default_factory=list)
     is_superadmin: bool = False
 
     @property
@@ -23,7 +23,7 @@ class UserContext:
         return self.is_superadmin or "admin" in self.roles
 
 
-def can_user_access_chunk(metadata: Dict[str, Any], user: UserContext | None) -> bool:
+def can_user_access_chunk(metadata: dict[str, Any], user: UserContext | None) -> bool:
     """Evaluate whether the given user context is permitted to view a chunk."""
     if user is None:
         # If no user context is provided, only allow public chunks with no tenant restrictions
@@ -68,13 +68,13 @@ def can_user_access_chunk(metadata: Dict[str, Any], user: UserContext | None) ->
 
 
 def filter_chunks_by_access(
-    chunks: List[Dict[str, Any]], user: UserContext | None
-) -> List[Dict[str, Any]]:
+    chunks: list[dict[str, Any]], user: UserContext | None
+) -> list[dict[str, Any]]:
     """Filter candidate retrieval chunks, dropping any that fail the access policy."""
     if user is None:
         return [c for c in chunks if can_user_access_chunk(c.get("metadata", {}), None)]
 
-    allowed: List[Dict[str, Any]] = []
+    allowed: list[dict[str, Any]] = []
     for chunk in chunks:
         meta = chunk.get("metadata", {})
         if can_user_access_chunk(meta, user):
@@ -83,7 +83,7 @@ def filter_chunks_by_access(
     return allowed
 
 
-def build_chroma_where_clause(user: UserContext | None) -> Dict[str, Any] | None:
+def build_chroma_where_clause(user: UserContext | None) -> dict[str, Any] | None:
     """Build a ChromaDB where filter that constrains queries to the user's tenant."""
     if user is None:
         return {"is_public": "true"}

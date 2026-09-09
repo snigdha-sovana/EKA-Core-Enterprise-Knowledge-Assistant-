@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -46,13 +46,15 @@ DOC_ID = uuid.uuid4()
 
 
 def _token(role: str, tenant_id: str = TENANT_ID, superadmin: bool = False) -> str:
-    return create_access_token({
-        "sub": USER_ID,
-        "email": "user@test.com",
-        "tenant_id": tenant_id,
-        "roles": [role],
-        "is_superadmin": superadmin,
-    })
+    return create_access_token(
+        {
+            "sub": USER_ID,
+            "email": "user@test.com",
+            "tenant_id": tenant_id,
+            "roles": [role],
+            "is_superadmin": superadmin,
+        }
+    )
 
 
 @pytest.fixture
@@ -109,8 +111,8 @@ def _make_case(
         resolved_by=None,
         resolved_at=resolved_at,
     )
-    case.created_at = datetime(2026, 9, 6, tzinfo=timezone.utc)
-    case.updated_at = datetime(2026, 9, 6, tzinfo=timezone.utc)
+    case.created_at = datetime(2026, 9, 6, tzinfo=UTC)
+    case.updated_at = datetime(2026, 9, 6, tzinfo=UTC)
     return case
 
 
@@ -123,8 +125,8 @@ def _make_dept(is_fallback: bool = False) -> Department:
         is_fallback=is_fallback,
         is_active=True,
     )
-    dept.created_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
-    dept.updated_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    dept.created_at = datetime(2026, 9, 1, tzinfo=UTC)
+    dept.updated_at = datetime(2026, 9, 1, tzinfo=UTC)
     return dept
 
 
@@ -167,6 +169,7 @@ class TestListEscalationCases:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -206,6 +209,7 @@ class TestListEscalationCases:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -223,6 +227,7 @@ class TestListEscalationCases:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -240,6 +245,7 @@ class TestListEscalationCases:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -265,6 +271,7 @@ class TestGetEscalationCase:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -286,6 +293,7 @@ class TestGetEscalationCase:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -334,6 +342,7 @@ class TestResolveEscalationCase:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.post(
@@ -358,6 +367,7 @@ class TestResolveEscalationCase:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.post(
@@ -379,6 +389,7 @@ class TestResolveEscalationCase:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.post(
@@ -389,9 +400,7 @@ class TestResolveEscalationCase:
         app.dependency_overrides.pop(get_async_session, None)
         assert resp.status_code == 404
 
-    def test_resolve_missing_doc_returns_422(
-        self, client: TestClient, admin_token: str
-    ) -> None:
+    def test_resolve_missing_doc_returns_422(self, client: TestClient, admin_token: str) -> None:
         case = _make_case(status="open")
         calls = []
         mock_session = MagicMock()
@@ -412,6 +421,7 @@ class TestResolveEscalationCase:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.post(
@@ -539,7 +549,7 @@ class TestEscalationService:
             is_fallback=True,
             is_active=True,
         )
-        fallback_dept.created_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        fallback_dept.created_at = datetime(2026, 9, 1, tzinfo=UTC)
 
         mock_session = MagicMock()
         execute_result = MagicMock()
@@ -617,15 +627,26 @@ class TestEscalationCaseModel:
     def test_expected_columns(self) -> None:
         cols = {c.key for c in EscalationCase.__table__.columns}
         required = {
-            "case_id", "tenant_id", "department_id", "user_id",
-            "query_text", "query_hash", "status", "classification_reason",
-            "confidence_score", "resolution_doc_id", "resolved_by",
-            "resolved_at", "created_at", "updated_at",
+            "case_id",
+            "tenant_id",
+            "department_id",
+            "user_id",
+            "query_text",
+            "query_hash",
+            "status",
+            "classification_reason",
+            "confidence_score",
+            "resolution_doc_id",
+            "resolved_by",
+            "resolved_at",
+            "created_at",
+            "updated_at",
         }
         assert required.issubset(cols)
 
     def test_query_hash_helper(self) -> None:
         from src.escalation.service import _hash_query
+
         h = _hash_query("hello")
         assert len(h) == 64  # SHA-256 hex = 64 chars
         assert _hash_query("hello") == _hash_query("hello")  # deterministic
@@ -640,16 +661,19 @@ class TestEscalationCaseModel:
 class TestMigration:
     def test_migration_file_exists(self) -> None:
         from pathlib import Path
+
         assert Path("alembic/versions/0004_escalation_cases.py").exists()
 
     def test_migration_revision_chain(self) -> None:
         from pathlib import Path
+
         content = Path("alembic/versions/0004_escalation_cases.py").read_text()
         assert "revision: str = '0004_escalation_cases'" in content
         assert "0003_departments" in content
 
     def test_migration_has_expected_indexes(self) -> None:
         from pathlib import Path
+
         content = Path("alembic/versions/0004_escalation_cases.py").read_text()
         assert "ix_escalation_cases_tenant_id" in content
         assert "ix_escalation_cases_status" in content
@@ -668,10 +692,12 @@ class TestQueryEndpointAbstention:
         """When pipeline abstains, /query should return abstained=True with a case_id."""
         mock_session = MagicMock()
         # Escalation case created in DB
-        case = _make_case()
-        mock_session.execute = AsyncMock(return_value=MagicMock(
-            scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
-        ))
+        _case = _make_case()
+        mock_session.execute = AsyncMock(
+            return_value=MagicMock(
+                scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+            )
+        )
         mock_session.add = MagicMock()
         mock_session.commit = AsyncMock()
         mock_session.refresh = AsyncMock()
@@ -681,6 +707,7 @@ class TestQueryEndpointAbstention:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         with patch("src.api.app.get_pipeline") as mock_get_pipeline:
@@ -688,9 +715,9 @@ class TestQueryEndpointAbstention:
             mock_pipeline.query_async = AsyncMock(
                 return_value=(
                     "I do not have sufficient information.",  # answer
-                    [],   # citations
-                    True, # abstained=True
-                    0.05, # confidence_score below threshold
+                    [],  # citations
+                    True,  # abstained=True
+                    0.05,  # confidence_score below threshold
                 )
             )
             mock_generator = MagicMock()

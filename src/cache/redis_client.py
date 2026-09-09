@@ -11,14 +11,15 @@ try:
 except ImportError:
     aioredis = None
 
-    class RedisError(Exception):
+    class RedisError(Exception):  # type: ignore[no-redef]
         pass
 
-    class ConnectionError(RedisError):
+    class ConnectionError(RedisError):  # type: ignore[no-redef]
         pass
 
-    class TimeoutError(RedisError):
+    class TimeoutError(RedisError):  # type: ignore[no-redef]
         pass
+
 
 from src.config import settings
 

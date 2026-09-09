@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import uuid
-from typing import Callable, Sequence
+from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
+
 from src.auth.schemas import TokenPayload
 from src.auth.security import JWTError, decode_token
 
@@ -52,6 +53,7 @@ def require_role(*allowed_roles: str) -> Callable:
 
     Superadmins and tenant 'admin' roles implicitly pass all checks.
     """
+
     async def role_checker(user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
         if user.is_superadmin or "admin" in user.roles:
             return user

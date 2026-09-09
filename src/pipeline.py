@@ -272,17 +272,33 @@ class RAGPipeline:
                 vs = self._get_vector_store(lang)
                 vs.delete_where({"doc_id": str(doc_id)})
             except Exception as exc:
-                logger.warning("Could not delete doc %s from %s vector store: %s", doc_id, lang, exc)
+                logger.warning(
+                    "Could not delete doc %s from %s vector store: %s", doc_id, lang, exc
+                )
 
         for hr in self._hybrid_retrievers.values():
             hr.invalidate_index(tenant_id=tenant_id)
 
         logger.info("Deleted document %s from vector store (tenant: %s)", doc_id, tenant_id)
 
-
     # ------------------------------------------------------------------
     # Query
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_confidence_score(contexts: list[dict[str, Any]]) -> float:
+        """Extract the highest confidence score from retrieved/reranked contexts."""
+        if not contexts:
+            return 0.0
+        scores: list[float] = []
+        for c in contexts:
+            raw = c.get("rerank_score") if c.get("rerank_score") is not None else c.get("score")
+            if raw is not None:
+                try:
+                    scores.append(float(raw))
+                except (ValueError, TypeError):
+                    pass
+        return max(scores, default=0.0)
 
     def query(
         self,
@@ -327,7 +343,12 @@ class RAGPipeline:
             k = top_k or self.config.top_k_final
 
             contexts = self._retrieve(
-                question, use_hybrid=use_hybrid, use_reranker=use_reranker, k=k, lang=lang, user=user
+                question,
+                use_hybrid=use_hybrid,
+                use_reranker=use_reranker,
+                k=k,
+                lang=lang,
+                user=user,
             )
 
             if not contexts:
@@ -338,25 +359,24 @@ class RAGPipeline:
                     ),
                     [],
                     True,
-                    0.0
+                    0.0,
                 )
 
             if use_reranker:
                 contexts = self._apply_reranker(question, contexts, top_k=k)
 
             # Phase 4: Abstention logic
-            confidence_score = max(
-                (c.get("rerank_score") if c.get("rerank_score") is not None else c.get("score", 0.0)) 
-                for c in contexts
-            ) if contexts else 0.0
+            confidence_score: float = self._extract_confidence_score(contexts)
 
             if confidence_score < 0.3:
                 logger.info("Abstaining due to low confidence score: %.4f < 0.3", confidence_score)
                 return (
-                    _("I do not have sufficient authoritative information in the indexed documents to answer this question reliably."),
+                    _(
+                        "I do not have sufficient authoritative information in the indexed documents to answer this question reliably."
+                    ),
                     [],
                     True,
-                    confidence_score
+                    confidence_score,
                 )
 
             contexts_for_generation = self._apply_context_budget(contexts)
@@ -431,7 +451,7 @@ class RAGPipeline:
                     ),
                     [],
                     True,
-                    0.0
+                    0.0,
                 )
 
             if use_reranker:
@@ -440,18 +460,17 @@ class RAGPipeline:
                 )
 
             # Phase 4: Abstention logic
-            confidence_score = max(
-                (c.get("rerank_score") if c.get("rerank_score") is not None else c.get("score", 0.0)) 
-                for c in contexts
-            ) if contexts else 0.0
+            confidence_score: float = self._extract_confidence_score(contexts)
 
             if confidence_score < 0.3:
                 logger.info("Abstaining due to low confidence score: %.4f < 0.3", confidence_score)
                 return (
-                    _("I do not have sufficient authoritative information in the indexed documents to answer this question reliably."),
+                    _(
+                        "I do not have sufficient authoritative information in the indexed documents to answer this question reliably."
+                    ),
                     [],
                     True,
-                    confidence_score
+                    confidence_score,
                 )
 
             contexts_for_generation = self._apply_context_budget(contexts)
@@ -487,7 +506,9 @@ class RAGPipeline:
                 query, k=fetch_k, where=where, user=user
             )
         else:
-            raw_contexts = self._get_vector_store(lang).similarity_search(query, k=fetch_k, where=where)
+            raw_contexts = self._get_vector_store(lang).similarity_search(
+                query, k=fetch_k, where=where
+            )
             raw_contexts = filter_chunks_by_access(raw_contexts, user)
 
         return raw_contexts

@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.app import app
 from src.auth.security import create_access_token
 from src.retrieval.access_filter import UserContext
 from src.retrieval.hybrid import HybridRetriever
@@ -23,13 +21,15 @@ USER_1 = str(uuid.uuid4())
 
 @pytest.fixture
 def tenant1_user_token() -> str:
-    return create_access_token({
-        "sub": USER_1,
-        "email": "user@tenant1.com",
-        "tenant_id": TENANT_1,
-        "roles": ["viewer"],
-        "is_superadmin": False,
-    })
+    return create_access_token(
+        {
+            "sub": USER_1,
+            "email": "user@tenant1.com",
+            "tenant_id": TENANT_1,
+            "roles": ["viewer"],
+            "is_superadmin": False,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -44,9 +44,21 @@ def test_bm25_keyword_exact_match(tmp_path: Path) -> None:
     mock_vector_store.persist_path = tmp_path / "chroma"
 
     chunks = [
-        {"id": "c1", "document": "The database reported ERR_CODE_9042_DEADLOCK during checkout.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},
-        {"id": "c2", "document": "Standard checkout procedure proceeds normally without errors.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},
-        {"id": "c3", "document": "Network timeouts are handled by retrying up to 3 times.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},
+        {
+            "id": "c1",
+            "document": "The database reported ERR_CODE_9042_DEADLOCK during checkout.",
+            "metadata": {"tenant_id": TENANT_1, "is_public": "true"},
+        },
+        {
+            "id": "c2",
+            "document": "Standard checkout procedure proceeds normally without errors.",
+            "metadata": {"tenant_id": TENANT_1, "is_public": "true"},
+        },
+        {
+            "id": "c3",
+            "document": "Network timeouts are handled by retrying up to 3 times.",
+            "metadata": {"tenant_id": TENANT_1, "is_public": "true"},
+        },
     ]
     mock_vector_store.get_all_chunks.return_value = chunks
 
@@ -66,10 +78,18 @@ def test_bm25_tenant_partitioning_isolation(tmp_path: Path) -> None:
     mock_vector_store.persist_path = tmp_path / "chroma"
 
     tenant1_chunks = [
-        {"id": "t1_c1", "document": "CONFIDENTIAL_PROJECT_NEBULA specifications and budget.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},
+        {
+            "id": "t1_c1",
+            "document": "CONFIDENTIAL_PROJECT_NEBULA specifications and budget.",
+            "metadata": {"tenant_id": TENANT_1, "is_public": "true"},
+        },
     ]
     tenant2_chunks = [
-        {"id": "t2_c1", "document": "General public policies and HR handbook for employees.", "metadata": {"tenant_id": TENANT_2, "is_public": "true"}},
+        {
+            "id": "t2_c1",
+            "document": "General public policies and HR handbook for employees.",
+            "metadata": {"tenant_id": TENANT_2, "is_public": "true"},
+        },
     ]
 
     def mock_get_all(where=None):
@@ -102,16 +122,38 @@ def test_reciprocal_rank_fusion_combined_ranking(tmp_path: Path) -> None:
     mock_vector_store.persist_path = tmp_path / "chroma"
 
     chunks = [
-        {"id": "c_both", "document": "Enterprise Knowledge Assistant deployment guide.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},
-        {"id": "c_bm25_only", "document": "Deployment command list: docker compose up.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},
-        {"id": "c_vec_only", "document": "Installation and launch overview for EKA.", "metadata": {"tenant_id": TENANT_1, "is_public": "true"}},
+        {
+            "id": "c_both",
+            "document": "Enterprise Knowledge Assistant deployment guide.",
+            "metadata": {"tenant_id": TENANT_1, "is_public": "true"},
+        },
+        {
+            "id": "c_bm25_only",
+            "document": "Deployment command list: docker compose up.",
+            "metadata": {"tenant_id": TENANT_1, "is_public": "true"},
+        },
+        {
+            "id": "c_vec_only",
+            "document": "Installation and launch overview for EKA.",
+            "metadata": {"tenant_id": TENANT_1, "is_public": "true"},
+        },
     ]
     mock_vector_store.get_all_chunks.return_value = chunks
 
     # Mock vector store similarity search returning c_both at rank 0, c_vec_only at rank 1
     mock_vector_store.similarity_search.return_value = [
-        {"id": "c_both", "document": chunks[0]["document"], "metadata": chunks[0]["metadata"], "score": 0.95},
-        {"id": "c_vec_only", "document": chunks[2]["document"], "metadata": chunks[2]["metadata"], "score": 0.85},
+        {
+            "id": "c_both",
+            "document": chunks[0]["document"],
+            "metadata": chunks[0]["metadata"],
+            "score": 0.95,
+        },
+        {
+            "id": "c_vec_only",
+            "document": chunks[2]["document"],
+            "metadata": chunks[2]["metadata"],
+            "score": 0.85,
+        },
     ]
 
     retriever = HybridRetriever(vector_store=mock_vector_store, alpha=0.5, rrf_k=60)
@@ -212,7 +254,7 @@ def test_api_query_hybrid_and_reranker(client: TestClient, tenant1_user_token: s
                 "According to the handbook, benefits include health insurance.",
                 mock_citations,
                 False,
-                0.96
+                0.96,
             )
         )
         mock_get_pipe.return_value = mock_pipeline

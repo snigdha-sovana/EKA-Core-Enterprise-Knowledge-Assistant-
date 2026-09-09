@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
-from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -48,19 +48,19 @@ class Tenant(Base, TimestampMixin):
         DateTime(timezone=True),
         nullable=True,
     )
-    config: Mapped[Dict[str, Any]] = mapped_column(
+    config: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
     )
 
     # Relationships
-    user_roles: Mapped[list["UserTenantRole"]] = relationship(
+    user_roles: Mapped[list[UserTenantRole]] = relationship(
         "UserTenantRole",
         back_populates="tenant",
         cascade="all, delete-orphan",
     )
-    departments: Mapped[list["Department"]] = relationship(
+    departments: Mapped[list[Department]] = relationship(
         "Department",
         back_populates="tenant",
         cascade="all, delete-orphan",

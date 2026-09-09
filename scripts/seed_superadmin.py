@@ -98,7 +98,7 @@ async def seed_superadmin(
         print(f" Tenant ID   : {tenant.tenant_id}")
         print(f" User Email  : {user.email}")
         print(f" User ID     : {user.user_id}")
-        print(f" Role        : admin")
+        print(" Role        : admin")
         print("=" * 60 + "\n")
 
         await db_engine.close_db_engine()
@@ -109,7 +109,9 @@ def main() -> None:
     parser.add_argument("--email", default="admin@company.com", help="Superadmin email address")
     parser.add_argument("--password", default="changeme123", help="Superadmin password")
     parser.add_argument("--tenant-slug", default="default", help="Default tenant slug")
-    parser.add_argument("--tenant-name", default="Default Organization", help="Default tenant display name")
+    parser.add_argument(
+        "--tenant-name", default="Default Organization", help="Default tenant display name"
+    )
 
     args = parser.parse_args()
     asyncio.run(seed_superadmin(args.email, args.password, args.tenant_slug, args.tenant_name))

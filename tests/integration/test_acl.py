@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import app
-from src.audit.service import AuditService, hash_query_text
+from src.audit.service import hash_query_text
 from src.auth.security import create_access_token
 from src.db.engine import get_async_session
 from src.db.models.audit_log import AuditLog
@@ -30,46 +29,54 @@ USER_TENANT_B_ID = str(uuid.uuid4())
 
 @pytest.fixture
 def finance_user_token() -> str:
-    return create_access_token({
-        "sub": USER_FINANCE_ID,
-        "email": "finance@tenant-a.com",
-        "tenant_id": TENANT_A,
-        "roles": ["viewer", "finance"],
-        "is_superadmin": False,
-    })
+    return create_access_token(
+        {
+            "sub": USER_FINANCE_ID,
+            "email": "finance@tenant-a.com",
+            "tenant_id": TENANT_A,
+            "roles": ["viewer", "finance"],
+            "is_superadmin": False,
+        }
+    )
 
 
 @pytest.fixture
 def eng_user_token() -> str:
-    return create_access_token({
-        "sub": USER_ENG_ID,
-        "email": "eng@tenant-a.com",
-        "tenant_id": TENANT_A,
-        "roles": ["viewer", "engineering"],
-        "is_superadmin": False,
-    })
+    return create_access_token(
+        {
+            "sub": USER_ENG_ID,
+            "email": "eng@tenant-a.com",
+            "tenant_id": TENANT_A,
+            "roles": ["viewer", "engineering"],
+            "is_superadmin": False,
+        }
+    )
 
 
 @pytest.fixture
 def tenant_b_finance_token() -> str:
-    return create_access_token({
-        "sub": USER_TENANT_B_ID,
-        "email": "finance@tenant-b.com",
-        "tenant_id": TENANT_B,
-        "roles": ["viewer", "finance"],
-        "is_superadmin": False,
-    })
+    return create_access_token(
+        {
+            "sub": USER_TENANT_B_ID,
+            "email": "finance@tenant-b.com",
+            "tenant_id": TENANT_B,
+            "roles": ["viewer", "finance"],
+            "is_superadmin": False,
+        }
+    )
 
 
 @pytest.fixture
 def tenant_a_admin_token() -> str:
-    return create_access_token({
-        "sub": str(uuid.uuid4()),
-        "email": "admin@tenant-a.com",
-        "tenant_id": TENANT_A,
-        "roles": ["admin"],
-        "is_superadmin": False,
-    })
+    return create_access_token(
+        {
+            "sub": str(uuid.uuid4()),
+            "email": "admin@tenant-a.com",
+            "tenant_id": TENANT_A,
+            "roles": ["admin"],
+            "is_superadmin": False,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -161,8 +168,14 @@ def test_filter_chunks_by_access() -> None:
     user = UserContext(user_id=USER_FINANCE_ID, tenant_id=TENANT_A, roles=["finance"])
     chunks = [
         {"id": "1", "metadata": {"tenant_id": TENANT_A, "is_public": "true"}},
-        {"id": "2", "metadata": {"tenant_id": TENANT_A, "is_public": "false", "allowed_roles": ",finance,"}},
-        {"id": "3", "metadata": {"tenant_id": TENANT_A, "is_public": "false", "allowed_roles": ",legal,"}},
+        {
+            "id": "2",
+            "metadata": {"tenant_id": TENANT_A, "is_public": "false", "allowed_roles": ",finance,"},
+        },
+        {
+            "id": "3",
+            "metadata": {"tenant_id": TENANT_A, "is_public": "false", "allowed_roles": ",legal,"},
+        },
         {"id": "4", "metadata": {"tenant_id": TENANT_B, "is_public": "true"}},
     ]
     allowed = filter_chunks_by_access(chunks, user)
@@ -227,9 +240,7 @@ def test_query_silent_non_leakage(client: TestClient, eng_user_token: str) -> No
         assert "case_id" in data  # Phase 6 escalation field present
 
 
-def test_tenant_isolation_in_query(
-    client: TestClient, tenant_b_finance_token: str
-) -> None:
+def test_tenant_isolation_in_query(client: TestClient, tenant_b_finance_token: str) -> None:
     """Tenant B user querying passes Tenant B UserContext to pipeline."""
     with patch("src.api.app.get_pipeline") as mock_get_pipe:
         mock_pipeline = MagicMock()
@@ -277,7 +288,10 @@ def test_ingest_quota_limit_enforced(client: TestClient, tenant_a_admin_token: s
                 headers={"Authorization": f"Bearer {tenant_a_admin_token}"},
             )
             assert response.status_code == 400
-            assert "Tenant document limit reached (maximum 100 active documents)" in response.json()["detail"]
+            assert (
+                "Tenant document limit reached (maximum 100 active documents)"
+                in response.json()["detail"]
+            )
     finally:
         app.dependency_overrides.clear()
 
@@ -301,8 +315,8 @@ def test_list_documents(client: TestClient, tenant_a_admin_token: str) -> None:
         chunk_count=12,
         status="active",
         access_policy={"is_public": False, "roles": ["finance"]},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     mock_session = AsyncMock()
@@ -340,8 +354,8 @@ def test_patch_document_permissions(client: TestClient, tenant_a_admin_token: st
         chunk_count=6,
         status="active",
         access_policy={"is_public": False, "roles": ["finance"]},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     mock_session = AsyncMock()
@@ -368,9 +382,7 @@ def test_patch_document_permissions(client: TestClient, tenant_a_admin_token: st
         app.dependency_overrides.clear()
 
 
-def test_delete_document_archives_record(
-    client: TestClient, tenant_a_admin_token: str
-) -> None:
+def test_delete_document_archives_record(client: TestClient, tenant_a_admin_token: str) -> None:
     """DELETE /documents/{id} soft-deletes (archives) the document."""
     doc_id = uuid.uuid4()
     doc_model = DocumentModel(
@@ -384,8 +396,8 @@ def test_delete_document_archives_record(
         chunk_count=2,
         status="active",
         access_policy={"is_public": True},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     mock_session = AsyncMock()
@@ -430,7 +442,7 @@ def test_admin_list_audit_logs(client: TestClient, tenant_a_admin_token: str) ->
         chunk_ids=["chunk_1", "chunk_2"],
         query_hash=hash_query_text("Sensitive financial query"),
         ip_address="127.0.0.1",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     mock_session = AsyncMock()

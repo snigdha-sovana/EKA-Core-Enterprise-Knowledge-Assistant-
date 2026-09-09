@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict
+from typing import Any
 
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -64,18 +64,18 @@ class DocumentModel(Base, TimestampMixin):
         default="active",
         index=True,
     )
-    access_policy: Mapped[Dict[str, Any]] = mapped_column(
+    access_policy: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
     )
 
     # Relationships
-    tenant: Mapped["Tenant"] = relationship(
+    tenant: Mapped[Tenant] = relationship(
         "Tenant",
         foreign_keys=[tenant_id],
     )
-    owner: Mapped["User | None"] = relationship(
+    owner: Mapped[User | None] = relationship(
         "User",
         foreign_keys=[owner_id],
     )

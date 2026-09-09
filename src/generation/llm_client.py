@@ -74,7 +74,9 @@ class LLMClient:
         elif self.provider == "ollama":
             if self._ollama_provider is None:
                 self._ollama_provider = OllamaProvider(model=self.model, timeout=self.timeout)
-            return await self._ollama_provider.complete_async(prompt, system, temperature, max_tokens)
+            return await self._ollama_provider.complete_async(
+                prompt, system, temperature, max_tokens
+            )
         elif self.provider == "openai":
             return await self._call_openai_async(prompt, system, temperature, max_tokens)
         elif self.provider == "anthropic":
@@ -109,6 +111,7 @@ class LLMClient:
             )
 
         import time
+
         from src.utils.usage import request_usage
 
         start_time = time.perf_counter()
@@ -154,6 +157,7 @@ class LLMClient:
                 )
 
         import time
+
         from src.utils.usage import request_usage
 
         start_time = time.perf_counter()
@@ -193,6 +197,7 @@ class LLMClient:
             )
 
         import time
+
         from src.utils.usage import request_usage
 
         start_time = time.perf_counter()
@@ -238,6 +243,7 @@ class LLMClient:
                 )
 
         import time
+
         from src.utils.usage import request_usage
 
         start_time = time.perf_counter()

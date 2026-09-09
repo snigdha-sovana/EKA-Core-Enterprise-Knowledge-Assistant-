@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -62,9 +62,7 @@ async def _classify_query_to_department(
         return None, "No departments configured for this tenant."
 
     dept_list = "\n".join(
-        f"- {d.name}: {d.description or 'No description'}"
-        for d in departments
-        if not d.is_fallback
+        f"- {d.name}: {d.description or 'No description'}" for d in departments if not d.is_fallback
     )
     fallback_depts = [d for d in departments if d.is_fallback]
 
@@ -254,6 +252,7 @@ class EscalationService:
         doc = doc_result.scalar_one_or_none()
         if doc is None:
             from fastapi import HTTPException
+
             raise HTTPException(
                 status_code=422,
                 detail=(
@@ -265,7 +264,7 @@ class EscalationService:
         case.status = STATUS_RESOLVED
         case.resolution_doc_id = resolution_doc_id
         case.resolved_by = resolved_by
-        case.resolved_at = datetime.now(timezone.utc)
+        case.resolved_at = datetime.now(UTC)
         await session.commit()
         await session.refresh(case)
         return case

@@ -11,7 +11,7 @@ from src.utils.i18n import _
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SYSTEM_PROMPT = """You are a helpful research assistant. Answer the user's question based ONLY on the provided context. 
+DEFAULT_SYSTEM_PROMPT = """You are a helpful research assistant. Answer the user's question based ONLY on the provided context.
 
 For every factual claim you make, you MUST cite the exact source chunk using the numbered references in brackets like [1], [2], etc. Each source maps to the corresponding context chunk provided below.
 

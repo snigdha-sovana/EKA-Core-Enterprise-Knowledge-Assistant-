@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -101,22 +101,22 @@ class ERPSyncRecord(Base, TimestampMixin):
         Text,
         nullable=True,
     )
-    raw_metadata: Mapped[Dict[str, Any]] = mapped_column(
+    raw_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
     )
 
     # Relationships
-    tenant: Mapped["Tenant"] = relationship(  # noqa: F821
+    tenant: Mapped[Tenant] = relationship(  # noqa: F821
         "Tenant",
         foreign_keys=[tenant_id],
     )
-    document: Mapped["DocumentModel | None"] = relationship(  # noqa: F821
+    document: Mapped[DocumentModel | None] = relationship(  # noqa: F821
         "DocumentModel",
         foreign_keys=[document_id],
     )
-    department: Mapped["Department | None"] = relationship(  # noqa: F821
+    department: Mapped[Department | None] = relationship(  # noqa: F821
         "Department",
         foreign_keys=[department_id],
     )

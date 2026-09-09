@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -20,7 +20,7 @@ from src.db.models.department import Department
 from src.db.models.document import DocumentModel
 from src.db.models.erp_sync import ERPSyncRecord
 from src.db.models.escalation_case import EscalationCase
-from src.erp.service import ERPSyncService, SyncSummary
+from src.erp.service import ERPSyncService
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +40,12 @@ class ERPRecordResponse(BaseModel):
     entity_type: str
     title: str
     version_hash: str
-    document_id: Optional[uuid.UUID] = None
-    department_id: Optional[uuid.UUID] = None
+    document_id: uuid.UUID | None = None
+    department_id: uuid.UUID | None = None
     sync_status: str
     is_deleted: bool
-    last_synced_at: Optional[str] = None
-    raw_metadata: Dict[str, Any] = Field(default_factory=dict)
+    last_synced_at: str | None = None
+    raw_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ERPSyncStatusResponse(BaseModel):
@@ -55,15 +55,15 @@ class ERPSyncStatusResponse(BaseModel):
     active_synced: int
     deleted: int
     failed: int
-    last_synced_at: Optional[str] = None
-    department_counts: Dict[str, int]
+    last_synced_at: str | None = None
+    department_counts: dict[str, int]
 
 
 class DashboardOverviewResponse(BaseModel):
     tenant_id: str
-    knowledge_base: Dict[str, Any]
-    escalation_queue: Dict[str, Any]
-    audit_history: List[Dict[str, Any]]
+    knowledge_base: dict[str, Any]
+    escalation_queue: dict[str, Any]
+    audit_history: list[dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
@@ -95,14 +95,14 @@ def _validate_tenant_access(user: TokenPayload, tenant_id: uuid.UUID) -> None:
 
 @router.post(
     "/tenants/{tenant_id}/erp/sync",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     status_code=status.HTTP_200_OK,
 )
 async def trigger_erp_sync(
     tenant_id: uuid.UUID,
     user: TokenPayload = Depends(require_role("curator", "admin")),
     session: AsyncSession = Depends(get_async_session),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Trigger on-demand ERP reconciliation for a tenant (curator/admin only)."""
     _validate_tenant_access(user, tenant_id)
     summary = await ERPSyncService.reconcile_tenant(
@@ -132,19 +132,19 @@ async def get_erp_sync_status(
 
 @router.get(
     "/tenants/{tenant_id}/erp/records",
-    response_model=List[ERPRecordResponse],
+    response_model=list[ERPRecordResponse],
 )
 async def list_erp_records(
     tenant_id: uuid.UUID,
-    entity_type: Optional[str] = None,
-    department_id: Optional[uuid.UUID] = None,
-    sync_status_filter: Optional[str] = Query(None, alias="status"),
-    is_deleted: Optional[bool] = None,
+    entity_type: str | None = None,
+    department_id: uuid.UUID | None = None,
+    sync_status_filter: str | None = Query(None, alias="status"),
+    is_deleted: bool | None = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     user: TokenPayload = Depends(require_role("viewer", "curator", "admin")),
     session: AsyncSession = Depends(get_async_session),
-) -> List[ERPRecordResponse]:
+) -> list[ERPRecordResponse]:
     """List tracked ERP records with optional filtering."""
     _validate_tenant_access(user, tenant_id)
 
@@ -191,10 +191,10 @@ async def list_erp_records(
 @router.post("/erp/webhook", status_code=status.HTTP_200_OK)
 async def receive_erp_webhook(
     request: Request,
-    x_erp_signature: Optional[str] = Header(None, alias="X-ERP-Signature"),
-    x_erp_tenant_id: Optional[str] = Header(None, alias="X-ERP-Tenant-ID"),
+    x_erp_signature: str | None = Header(None, alias="X-ERP-Signature"),
+    x_erp_tenant_id: str | None = Header(None, alias="X-ERP-Tenant-ID"),
     session: AsyncSession = Depends(get_async_session),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Receive simulated or real ERP webhooks with HMAC-SHA256 signature verification."""
     if not x_erp_signature:
         raise HTTPException(
@@ -265,8 +265,12 @@ async def get_tenant_dashboard(
 
     # 1. Knowledge Base Stats
     doc_count_stmt = select(
-        func.count(DocumentModel.doc_id).filter(DocumentModel.status == "active").label("active_docs"),
-        func.count(DocumentModel.doc_id).filter(DocumentModel.status == "archived").label("archived_docs"),
+        func.count(DocumentModel.doc_id)
+        .filter(DocumentModel.status == "active")
+        .label("active_docs"),
+        func.count(DocumentModel.doc_id)
+        .filter(DocumentModel.status == "archived")
+        .label("archived_docs"),
     ).where(DocumentModel.tenant_id == tenant_id)
     doc_res = await session.execute(doc_count_stmt)
     doc_row = doc_res.first()
@@ -283,8 +287,12 @@ async def get_tenant_dashboard(
 
     # 2. Escalation Queue Stats
     esc_stmt = select(
-        func.count(EscalationCase.case_id).filter(EscalationCase.status == "open").label("open_cases"),
-        func.count(EscalationCase.case_id).filter(EscalationCase.status == "resolved").label("resolved_cases"),
+        func.count(EscalationCase.case_id)
+        .filter(EscalationCase.status == "open")
+        .label("open_cases"),
+        func.count(EscalationCase.case_id)
+        .filter(EscalationCase.status == "resolved")
+        .label("resolved_cases"),
     ).where(EscalationCase.tenant_id == tenant_id)
     esc_res = await session.execute(esc_stmt)
     esc_row = esc_res.first()

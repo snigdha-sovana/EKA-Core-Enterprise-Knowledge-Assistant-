@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -45,8 +44,6 @@ async def login(
     req: LoginRequest,
     session: AsyncSession = Depends(get_async_session),
 ) -> TokenResponse:
-
-
     """Authenticate user with email and password, returning JWT access & refresh tokens."""
     # Find user with tenant roles
     stmt = (
@@ -99,7 +96,9 @@ async def login(
             t_res = await session.execute(tenant_stmt)
             t = t_res.scalar_one_or_none()
             if not t:
-                raise HTTPException(status_code=404, detail=f"Tenant '{req.tenant_slug}' not found.")
+                raise HTTPException(
+                    status_code=404, detail=f"Tenant '{req.tenant_slug}' not found."
+                )
             target_tenant_id = str(t.tenant_id)
             user_roles = ["admin"]
     else:

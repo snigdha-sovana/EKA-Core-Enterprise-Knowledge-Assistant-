@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
@@ -29,7 +30,9 @@ def get_client_ip(request: Request) -> str:
 
 def get_tenant_user_key(request: Request) -> str:
     """Generate scoped rate limit key based on tenant_id, user_id, or IP."""
-    tenant_id = getattr(request.state, "tenant_id", None) or request.headers.get("X-Tenant-ID") or "public"
+    tenant_id = (
+        getattr(request.state, "tenant_id", None) or request.headers.get("X-Tenant-ID") or "public"
+    )
     user = getattr(request.state, "user", None)
     if user and getattr(user, "sub", None):
         return f"ek:{tenant_id}:user:{user.sub}"
@@ -74,9 +77,14 @@ def enterprise_rate_limit_exceeded_handler(request: Request, exc: Exception) -> 
     """RFC 6585 compliant 429 Too Many Requests response handler with retry headers."""
     retry_after = 60
     # slowapi RateLimitExceeded may carry retry-after in detail or headers
-    if hasattr(exc, "detail") and isinstance(exc.detail, str) and "retry after" in exc.detail.lower():
+    if (
+        hasattr(exc, "detail")
+        and isinstance(exc.detail, str)
+        and "retry after" in exc.detail.lower()
+    ):
         try:
             import re
+
             match = re.search(r"(\d+)", exc.detail)
             if match:
                 retry_after = int(match.group(1))
@@ -84,7 +92,13 @@ def enterprise_rate_limit_exceeded_handler(request: Request, exc: Exception) -> 
             pass
 
     key = get_tenant_user_key(request)
-    logger.warning("Rate limit exceeded for client key: %s on %s %s (retry-after: %ds)", key, request.method, request.url.path, retry_after)
+    logger.warning(
+        "Rate limit exceeded for client key: %s on %s %s (retry-after: %ds)",
+        key,
+        request.method,
+        request.url.path,
+        retry_after,
+    )
 
     headers = {
         "Retry-After": str(retry_after),
@@ -107,12 +121,15 @@ def enterprise_rate_limit_exceeded_handler(request: Request, exc: Exception) -> 
 
 try:
     import sys
+
     from slowapi import Limiter
     from slowapi.errors import RateLimitExceeded
 
     # Use in-memory backend for deterministic test execution, otherwise use Redis
     is_test_env = "pytest" in sys.modules or settings.app_env in ("test", "testing")
-    active_storage_uri = "memory://" if is_test_env else (settings.redis_url if settings.redis_url else "memory://")
+    active_storage_uri = (
+        "memory://" if is_test_env else (settings.redis_url if settings.redis_url else "memory://")
+    )
 
     limiter = Limiter(
         key_func=get_tenant_user_key,
@@ -128,8 +145,9 @@ try:
 except ImportError:
     logger.info("slowapi package not installed; placeholder rate limiter initialized.")
 
-    class RateLimitExceeded(Exception):
+    class RateLimitExceeded(Exception):  # type: ignore[no-redef]
         """Placeholder exception for RateLimitExceeded."""
+
         def __init__(self, detail: str = "Rate limit exceeded"):
             self.detail = detail
 
@@ -143,6 +161,7 @@ except ImportError:
         def limit(self, *args, **kwargs) -> Callable:
             def decorator(f):
                 return f
+
             return decorator
 
-    limiter = _MockLimiter()  # type: ignore
+    limiter = _MockLimiter()

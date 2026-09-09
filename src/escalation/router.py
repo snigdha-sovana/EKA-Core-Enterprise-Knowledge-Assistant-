@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
@@ -39,16 +38,16 @@ class EscalationCaseResponse(BaseModel):
 
     case_id: uuid.UUID
     tenant_id: uuid.UUID
-    department_id: Optional[uuid.UUID] = None
-    user_id: Optional[uuid.UUID] = None
-    query_hash: Optional[str] = None
+    department_id: uuid.UUID | None = None
+    user_id: uuid.UUID | None = None
+    query_hash: str | None = None
     query_text: str
     status: str
     classification_reason: str
-    confidence_score: Optional[float] = None
-    resolution_doc_id: Optional[uuid.UUID] = None
-    resolved_by: Optional[uuid.UUID] = None
-    resolved_at: Optional[datetime] = None
+    confidence_score: float | None = None
+    resolution_doc_id: uuid.UUID | None = None
+    resolved_by: uuid.UUID | None = None
+    resolved_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -110,16 +109,18 @@ async def _get_case_or_404(
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=List[EscalationCaseResponse], summary="List escalation cases")
+@router.get("", response_model=list[EscalationCaseResponse], summary="List escalation cases")
 async def list_escalation_cases(
     tenant_id: uuid.UUID = Path(...),
-    case_status: Optional[str] = Query(None, alias="status", description="Filter by status: open, resolved, classification_failed"),
-    department_id: Optional[uuid.UUID] = Query(None, description="Filter by department"),
+    case_status: str | None = Query(
+        None, alias="status", description="Filter by status: open, resolved, classification_failed"
+    ),
+    department_id: uuid.UUID | None = Query(None, description="Filter by department"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     user: TokenPayload = Depends(require_role("admin")),
     session: AsyncSession = Depends(get_async_session),
-) -> List[EscalationCaseResponse]:
+) -> list[EscalationCaseResponse]:
     """List escalation cases for the tenant (admin only).
 
     Returns cases ordered newest-first. Filterable by status and department.

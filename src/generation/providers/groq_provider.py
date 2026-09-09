@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from src.config import settings
 from src.utils.retry import async_retry_with_backoff, retry_with_backoff

@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
 from datetime import datetime
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.audit.service import AuditService
-from src.auth.dependencies import get_current_user, require_role
+from src.auth.dependencies import require_role
 from src.auth.schemas import TokenPayload
 from src.db.engine import get_async_session
 from src.db.models.document import DocumentModel
@@ -36,7 +36,7 @@ class DocumentResponse(BaseModel):
     file_size_bytes: int
     chunk_count: int
     status: str
-    access_policy: Dict[str, Any]
+    access_policy: dict[str, Any]
     created_at: datetime
     updated_at: datetime
 
@@ -47,14 +47,14 @@ class UpdatePermissionsRequest(BaseModel):
     access_policy: AccessPolicy
 
 
-@router.get("", response_model=List[DocumentResponse])
+@router.get("", response_model=list[DocumentResponse])
 async def list_documents(
     status_filter: str = Query("active", alias="status"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     user: TokenPayload = Depends(require_role("viewer", "curator", "admin")),
     session: AsyncSession = Depends(get_async_session),
-) -> List[DocumentResponse]:
+) -> list[DocumentResponse]:
     """List documents in the current tenant accessible to the user."""
     try:
         tenant_uuid = uuid.UUID(user.tenant_id)

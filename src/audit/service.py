@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from typing import Any, List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +30,7 @@ class AuditService:
         action: str,
         user_id: str | uuid.UUID | None = None,
         document_id: str | uuid.UUID | None = None,
-        chunk_ids: List[str] | None = None,
+        chunk_ids: list[str] | None = None,
         query_text: str | None = None,
         ip_address: str | None = None,
         session: AsyncSession | None = None,

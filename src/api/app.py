@@ -26,7 +26,6 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
@@ -34,6 +33,7 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -51,9 +51,9 @@ from src.db.models.document import DocumentModel
 from src.db.models.user_tenant_role import UserTenantRole
 from src.departments.router import router as departments_router
 from src.documents.router import router as documents_router
+from src.erp.router import router as erp_router
 from src.escalation.router import router as escalation_router
 from src.escalation.service import EscalationService
-from src.erp.router import router as erp_router
 from src.generation.citations import CitationFormatter
 from src.ingestion.access_control import AccessPolicy
 from src.middleware.rate_limit import RateLimitExceeded, _rate_limit_exceeded_handler, limiter
@@ -104,6 +104,7 @@ async def lifespan(app: FastAPI):
 
 async def setup_locale(accept_language: str | None = Header(None)):
     import gettext
+
     from src.utils.i18n import _current_translation
 
     lang = "en"
@@ -197,7 +198,9 @@ class _PrometheusMiddleware(BaseHTTPMiddleware):
         _http_requests_total.labels(
             path=path_str, method=request.method, status_code=status_str
         ).inc()
-        _http_request_duration_seconds.labels(path=path_str, method=request.method).observe(duration)
+        _http_request_duration_seconds.labels(path=path_str, method=request.method).observe(
+            duration
+        )
         return response
 
 
@@ -210,7 +213,11 @@ _cors_origins: list[str] = (
     else [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 )
 if "*" not in _cors_origins:
-    for default_origin in ("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"):
+    for default_origin in (
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+    ):
         if default_origin not in _cors_origins:
             _cors_origins.append(default_origin)
 
@@ -380,6 +387,7 @@ def readyz() -> HealthResponse:
         try:
             import rank_bm25
             import sentence_transformers
+
             _ = (rank_bm25, sentence_transformers)
         except ImportError:
             pass
@@ -409,7 +417,9 @@ def metrics() -> Response:
 
 
 @app.get("/stats", response_model=StatsResponse)
-def stats(user: TokenPayload = Depends(require_role("viewer", "curator", "admin"))) -> dict[str, Any]:
+def stats(
+    user: TokenPayload = Depends(require_role("viewer", "curator", "admin")),
+) -> dict[str, Any]:
     """Return pipeline statistics for the authenticated tenant."""
     pipeline = get_pipeline()
     return pipeline.stats()
@@ -599,9 +609,7 @@ async def ingest(
     if tenant_uuid is not None:
         try:
             policy_dict = (
-                request.access_policy.model_dump()
-                if request.access_policy
-                else {"is_public": True}
+                request.access_policy.model_dump() if request.access_policy else {"is_public": True}
             )
             file_size = source_path.stat().st_size if source_path.is_file() else 0
             doc_record = DocumentModel(
@@ -821,7 +829,15 @@ async def query(
             logger.warning("Could not record query audit event: %s", exc)
 
         # Token usage and retrieval mode response headers
-        mode = "hybrid+reranker" if (query_req.use_hybrid and query_req.use_reranker) else ("hybrid" if query_req.use_hybrid else ("reranker" if query_req.use_reranker else "dense"))
+        mode = (
+            "hybrid+reranker"
+            if (query_req.use_hybrid and query_req.use_reranker)
+            else (
+                "hybrid"
+                if query_req.use_hybrid
+                else ("reranker" if query_req.use_reranker else "dense")
+            )
+        )
         response.headers["X-RAG-Retrieval-Mode"] = mode
         response.headers["X-RAG-Prompt-Tokens"] = str(tracker.prompt_tokens)
         response.headers["X-RAG-Completion-Tokens"] = str(tracker.completion_tokens)
@@ -842,7 +858,6 @@ async def query(
             except Exception as exc:
                 logger.warning("Escalation case creation failed: %s", exc)
                 escalation = {}
-
 
             forwarded_msg = (
                 "Query forwarded — not enough resources in the knowledge base. "
@@ -925,14 +940,16 @@ async def query_stream(
                     pipeline._apply_reranker, question, contexts, top_k=k
                 )
 
-
             # Phase 4: Abstention threshold logic
-            confidence_score = 0.0
-            if contexts:
-                confidence_score = max(
-                    (c.get("rerank_score") if c.get("rerank_score") is not None else c.get("score", 0.0)) 
-                    for c in contexts
-                )
+            scores: list[float] = []
+            for c in contexts:
+                val = c.get("rerank_score") if c.get("rerank_score") is not None else c.get("score")
+                if val is not None:
+                    try:
+                        scores.append(float(val))
+                    except (ValueError, TypeError):
+                        pass
+            confidence_score: float = max(scores, default=0.0)
 
             if confidence_score < 0.3:
                 # Centralized abstention: create escalation case

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
+from docx.shared import Inches, Pt, RGBColor
 
 ADDITIONAL_PHASES_TEXT = """
 
@@ -411,7 +411,9 @@ def create_docx(md_path: Path, output_path: Path):
             p = doc.add_paragraph()
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(6)
-            run = p.add_run("__________________________________________________________________________")
+            run = p.add_run(
+                "__________________________________________________________________________"
+            )
             run.font.color.rgb = RGBColor(0xCC, 0xD4, 0xDD)
         elif stripped:
             p = doc.add_paragraph()

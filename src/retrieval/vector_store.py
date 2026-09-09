@@ -18,6 +18,7 @@ except ImportError:
         def __init__(self, *args, **kwargs):
             pass
 
+
 from src.ingestion.chunker import Chunk
 from src.utils.retry import retry_with_backoff
 
@@ -54,7 +55,9 @@ class VectorStore:
         self.chroma_port = chroma_port
 
         if chromadb is None:
-            raise ImportError("chromadb is not installed. Please install it using 'pip install chromadb'.")
+            raise ImportError(
+                "chromadb is not installed. Please install it using 'pip install chromadb'."
+            )
 
         # Lazy-load embedding function
         self._embedding_fn = _ChromaEmbeddingFunction(
@@ -149,12 +152,12 @@ class VectorStore:
                 return int(max_val)
             except Exception:
                 logger.debug("get_max_batch_size() failed", exc_info=True)
-                
+
         # Check for legacy max_batch_size property
         max_batch = getattr(self._client, "max_batch_size", None)
         if isinstance(max_batch, int):
             return max_batch
-            
+
         return self.DEFAULT_MAX_BATCH_SIZE
 
     def count(self) -> int:
@@ -236,7 +239,6 @@ class VectorStore:
             self._collection.delete(where=where)
 
         retry_with_backoff(_delete_filter, retries=3, backoff_in_seconds=0.5)
-
 
     # ------------------------------------------------------------------
     # Helpers

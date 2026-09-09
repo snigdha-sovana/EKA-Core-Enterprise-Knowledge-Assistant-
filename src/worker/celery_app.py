@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from src.config import settings
 
@@ -40,7 +39,6 @@ try:
         },
     )
 
-
     @celery_app.task(name="tasks.ping")
     def ping() -> str:
         """Simple healthcheck task."""
@@ -56,9 +54,10 @@ except ImportError:
         def task(self, *args, **kwargs):
             def decorator(f):
                 return f
+
             return decorator
 
-    celery_app = _MockCeleryApp()  # type: ignore
+    celery_app = _MockCeleryApp()
 
     def ping() -> str:
         return "pong"

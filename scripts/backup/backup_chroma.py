@@ -6,11 +6,11 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import sys
 import tarfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -33,14 +33,14 @@ def compute_sha256(file_path: Path) -> str:
 def run_chroma_backup(output_dir: Path, retention_days: int = 7) -> Path:
     """Run ChromaDB vector snapshot, generate metadata manifest, and enforce retention."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     backup_file = output_dir / f"chroma_backup_{timestamp}.tar.gz"
 
     logger.info("Starting ChromaDB vector store snapshot to %s...", backup_file)
 
-    manifest_data = {
+    manifest_data: dict[str, Any] = {
         "format": "eka_chromadb_snapshot_v1",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "host": settings.chroma_host,
         "port": settings.chroma_port,
         "collections": {},
@@ -50,6 +50,7 @@ def run_chroma_backup(output_dir: Path, retention_days: int = 7) -> Path:
     # Attempt to query live ChromaDB collections for metadata auditing
     try:
         import chromadb
+
         if settings.chroma_host and settings.chroma_host not in ("localhost", "127.0.0.1"):
             client = chromadb.HttpClient(host=settings.chroma_host, port=settings.chroma_port)
         else:
@@ -64,9 +65,15 @@ def run_chroma_backup(output_dir: Path, retention_days: int = 7) -> Path:
                 "metadata": col.metadata,
             }
             manifest_data["total_chunks"] += count
-        logger.info("Cataloged %d ChromaDB collections (%d total chunks).", len(collections), manifest_data["total_chunks"])
+        logger.info(
+            "Cataloged %d ChromaDB collections (%d total chunks).",
+            len(collections),
+            manifest_data["total_chunks"],
+        )
     except Exception as exc:
-        logger.warning("Could not query ChromaDB HTTP API directly (will snapshot directory): %s", exc)
+        logger.warning(
+            "Could not query ChromaDB HTTP API directly (will snapshot directory): %s", exc
+        )
 
     # Snapshot local chroma data directory if it exists
     data_dir = Path("./data/chroma")
@@ -80,7 +87,9 @@ def run_chroma_backup(output_dir: Path, retention_days: int = 7) -> Path:
             tar.add(data_dir, arcname="chroma_storage")
             logger.info("Archived ChromaDB storage directory: %s", data_dir)
         else:
-            logger.info("Local storage dir %s not found; archived metadata manifest only.", data_dir)
+            logger.info(
+                "Local storage dir %s not found; archived metadata manifest only.", data_dir
+            )
 
     temp_meta_file.unlink(missing_ok=True)
 
@@ -99,7 +108,7 @@ def run_chroma_backup(output_dir: Path, retention_days: int = 7) -> Path:
 
 def prune_old_backups(output_dir: Path, prefix: str, retention_days: int) -> None:
     """Prune backups older than retention_days."""
-    now = datetime.now(timezone.utc).timestamp()
+    now = datetime.now(UTC).timestamp()
     cutoff = now - (retention_days * 86400)
 
     for item in output_dir.glob(f"{prefix}*"):
@@ -113,7 +122,12 @@ def prune_old_backups(output_dir: Path, prefix: str, retention_days: int) -> Non
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ChromaDB Vector Backup Tool for EKA")
-    parser.add_argument("--output-dir", default="./data/backups/chroma", type=Path, help="Backup destination directory")
+    parser.add_argument(
+        "--output-dir",
+        default="./data/backups/chroma",
+        type=Path,
+        help="Backup destination directory",
+    )
     parser.add_argument("--retention-days", default=7, type=int, help="Retention period in days")
     args = parser.parse_args()
 

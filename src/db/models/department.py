@@ -63,12 +63,12 @@ class Department(Base, TimestampMixin):
     )
 
     # Relationships
-    tenant: Mapped["Tenant"] = relationship(  # noqa: F821
+    tenant: Mapped[Tenant] = relationship(  # noqa: F821
         "Tenant",
         back_populates="departments",
         foreign_keys=[tenant_id],
     )
-    owner: Mapped["User | None"] = relationship(  # noqa: F821
+    owner: Mapped[User | None] = relationship(  # noqa: F821
         "User",
         foreign_keys=[owner_id],
     )

@@ -7,11 +7,10 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Add project root to sys.path
@@ -35,6 +34,7 @@ def compute_sha256(file_path: Path) -> str:
 async def dump_postgres_via_python(output_path: Path) -> dict:
     """Python-native fallback dump using an isolated NullPool connection."""
     import gzip
+
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.pool import NullPool
@@ -76,12 +76,16 @@ async def dump_postgres_via_python(output_path: Path) -> dict:
 
         # Write compressed JSON payload
         with gzip.open(output_path, "wt", encoding="utf-8") as f:
-            json.dump({
-                "format": "eka_postgres_json_snapshot_v1",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "tables": tables_data,
-                "row_counts": row_counts,
-            }, f, indent=2)
+            json.dump(
+                {
+                    "format": "eka_postgres_json_snapshot_v1",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "tables": tables_data,
+                    "row_counts": row_counts,
+                },
+                f,
+                indent=2,
+            )
 
     finally:
         await temp_engine.dispose()
@@ -108,7 +112,7 @@ def _run_in_isolated_thread(coro_fn, *args, **kwargs):
 def run_postgres_backup(output_dir: Path, retention_days: int = 7) -> Path:
     """Run PostgreSQL backup, compute checksum, and enforce retention."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     backup_file = output_dir / f"postgres_backup_{timestamp}.sql.gz"
 
     logger.info("Starting PostgreSQL backup to %s...", backup_file)
@@ -126,7 +130,9 @@ def run_postgres_backup(output_dir: Path, retention_days: int = 7) -> Path:
             proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             if proc.returncode == 0 and backup_file.exists() and backup_file.stat().st_size > 0:
                 dump_success = True
-                logger.info("pg_dump completed successfully (%d bytes).", backup_file.stat().st_size)
+                logger.info(
+                    "pg_dump completed successfully (%d bytes).", backup_file.stat().st_size
+                )
             else:
                 logger.warning("pg_dump exited with error: %s", proc.stderr)
         except Exception as exc:
@@ -136,7 +142,6 @@ def run_postgres_backup(output_dir: Path, retention_days: int = 7) -> Path:
         logger.info("Using asynchronous SQLAlchemy snapshot engine...")
         row_counts = _run_in_isolated_thread(dump_postgres_via_python, backup_file)
         logger.info("Snapshot complete across %d tables: %s", len(row_counts), row_counts)
-
 
     # 2. Compute SHA-256 checksum
     checksum = compute_sha256(backup_file)
@@ -153,7 +158,7 @@ def run_postgres_backup(output_dir: Path, retention_days: int = 7) -> Path:
 
 def prune_old_backups(output_dir: Path, prefix: str, retention_days: int) -> None:
     """Remove backup files older than retention_days."""
-    now = datetime.now(timezone.utc).timestamp()
+    now = datetime.now(UTC).timestamp()
     cutoff = now - (retention_days * 86400)
 
     for item in output_dir.glob(f"{prefix}*"):
@@ -167,8 +172,15 @@ def prune_old_backups(output_dir: Path, prefix: str, retention_days: int) -> Non
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Automated PostgreSQL Backup Tool for EKA")
-    parser.add_argument("--output-dir", default="./data/backups/postgres", type=Path, help="Backup destination directory")
-    parser.add_argument("--retention-days", default=7, type=int, help="Number of days to retain backups")
+    parser.add_argument(
+        "--output-dir",
+        default="./data/backups/postgres",
+        type=Path,
+        help="Backup destination directory",
+    )
+    parser.add_argument(
+        "--retention-days", default=7, type=int, help="Number of days to retain backups"
+    )
     args = parser.parse_args()
 
     result_path = run_postgres_backup(args.output_dir, args.retention_days)

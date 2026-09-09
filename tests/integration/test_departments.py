@@ -12,7 +12,7 @@ Tests cover:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,7 +22,6 @@ from fastapi.testclient import TestClient
 from src.api.app import app
 from src.auth.security import create_access_token
 from src.db.models.department import Department
-from src.db.models.user_tenant_role import UserTenantRole
 
 # ---------------------------------------------------------------------------
 # Stable test IDs
@@ -42,13 +41,15 @@ FALLBACK_DEPT_ID = uuid.uuid4()
 
 
 def _token(role: str, tenant_id: str = TENANT_ID, superadmin: bool = False) -> str:
-    return create_access_token({
-        "sub": USER_ID,
-        "email": "user@test.com",
-        "tenant_id": tenant_id,
-        "roles": [role],
-        "is_superadmin": superadmin,
-    })
+    return create_access_token(
+        {
+            "sub": USER_ID,
+            "email": "user@test.com",
+            "tenant_id": tenant_id,
+            "roles": [role],
+            "is_superadmin": superadmin,
+        }
+    )
 
 
 @pytest.fixture
@@ -98,8 +99,8 @@ def _make_dept(
         is_fallback=is_fallback,
         is_active=is_active,
     )
-    dept.created_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
-    dept.updated_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    dept.created_at = datetime(2026, 9, 1, tzinfo=UTC)
+    dept.updated_at = datetime(2026, 9, 1, tzinfo=UTC)
     return dept
 
 
@@ -137,6 +138,7 @@ class TestListDepartments:
 
         with patch("src.departments.router.get_async_session", return_value=_override()):
             from src.db.engine import get_async_session
+
             app.dependency_overrides[get_async_session] = _override
 
             resp = client.get(
@@ -162,6 +164,7 @@ class TestListDepartments:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -191,6 +194,7 @@ class TestCreateDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _session_gen
 
         with patch("src.departments.router.Department") as MockDept:
@@ -230,6 +234,7 @@ class TestCreateDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.post(
@@ -257,6 +262,7 @@ class TestGetDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -278,6 +284,7 @@ class TestGetDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -304,6 +311,7 @@ class TestUpdateDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.patch(
@@ -353,6 +361,7 @@ class TestUpdateDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.patch(
@@ -369,9 +378,7 @@ class TestUpdateDepartment:
         self, client: TestClient, admin_token: str
     ) -> None:
         dept = _make_dept(is_fallback=False)
-        existing_fallback = _make_dept(
-            department_id=uuid.uuid4(), is_fallback=True, name="HR"
-        )
+        existing_fallback = _make_dept(department_id=uuid.uuid4(), is_fallback=True, name="HR")
         calls = []
         mock_session = MagicMock()
         mock_session.commit = AsyncMock()
@@ -391,6 +398,7 @@ class TestUpdateDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.patch(
@@ -417,6 +425,7 @@ class TestDeleteDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.delete(
@@ -429,9 +438,7 @@ class TestDeleteDepartment:
         # Confirm soft-delete: is_active set to False
         assert dept.is_active is False
 
-    def test_cannot_delete_fallback_department(
-        self, client: TestClient, admin_token: str
-    ) -> None:
+    def test_cannot_delete_fallback_department(self, client: TestClient, admin_token: str) -> None:
         fallback_dept = _make_dept(is_fallback=True, name="General")
         mock_session = _make_mock_session(scalar_result=fallback_dept)
 
@@ -439,6 +446,7 @@ class TestDeleteDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.delete(
@@ -464,6 +472,7 @@ class TestDeleteDepartment:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.delete(
@@ -491,6 +500,7 @@ class TestSuperadminAccess:
             yield mock_session
 
         from src.db.engine import get_async_session
+
         app.dependency_overrides[get_async_session] = _override
 
         resp = client.get(
@@ -538,11 +548,13 @@ class TestDepartmentModel:
 
     def test_tenant_relationship_registered(self) -> None:
         from src.db.models.tenant import Tenant
+
         rels = {r.key for r in Tenant.__mapper__.relationships}
         assert "departments" in rels
 
     def test_department_response_schema(self) -> None:
         from src.departments.router import DepartmentResponse
+
         dept = _make_dept()
         resp = DepartmentResponse.model_validate(dept)
         assert resp.department_id == DEPT_ID
@@ -559,13 +571,13 @@ class TestDepartmentModel:
 class TestMigration:
     def test_migration_file_exists(self) -> None:
         from pathlib import Path
-        migration = Path(
-            "alembic/versions/0003_departments.py"
-        )
+
+        migration = Path("alembic/versions/0003_departments.py")
         assert migration.exists(), "Migration file 0003_departments.py not found"
 
     def test_migration_revision_chain(self) -> None:
         from pathlib import Path
+
         content = Path("alembic/versions/0003_departments.py").read_text()
         assert "revision: str = '0003_departments'" in content
         assert "down_revision" in content
@@ -573,6 +585,7 @@ class TestMigration:
 
     def test_migration_has_partial_unique_index(self) -> None:
         from pathlib import Path
+
         content = Path("alembic/versions/0003_departments.py").read_text()
         assert "uq_departments_one_fallback_per_tenant" in content
         assert "is_fallback = true" in content

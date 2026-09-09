@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass
@@ -20,9 +19,9 @@ class ERPRecord:
     department_name: str
     entity_type: str = "policy"
     version: str = "1.0"
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     is_deleted: bool = False
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def version_hash(self) -> str:
@@ -30,7 +29,7 @@ class ERPRecord:
         payload = f"{self.title}:{self.content}:{self.is_deleted}:{self.department_name}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "external_record_id": self.external_record_id,
             "title": self.title,
@@ -45,8 +44,8 @@ class ERPRecord:
         }
 
 
-def _get_default_seed_records() -> List[ERPRecord]:
-    now = datetime.now(timezone.utc)
+def _get_default_seed_records() -> list[ERPRecord]:
+    now = datetime.now(UTC)
     return [
         ERPRecord(
             external_record_id="HR-POL-101",
@@ -102,16 +101,16 @@ class MockERPConnector:
     Acts as an ERP API client (e.g. for SAP BAPI/OData, NetSuite SuiteTalk, or Odoo XML-RPC).
     """
 
-    def __init__(self, seed_records: Optional[List[ERPRecord]] = None):
+    def __init__(self, seed_records: list[ERPRecord] | None = None):
         records = seed_records if seed_records is not None else _get_default_seed_records()
-        self._records: Dict[str, ERPRecord] = {r.external_record_id: r for r in records}
+        self._records: dict[str, ERPRecord] = {r.external_record_id: r for r in records}
 
     def fetch_records(
         self,
         tenant_id: str,
-        since: Optional[datetime] = None,
-        entity_type: Optional[str] = None,
-    ) -> List[ERPRecord]:
+        since: datetime | None = None,
+        entity_type: str | None = None,
+    ) -> list[ERPRecord]:
         """Fetch records from the mock ERP system, optionally filtered by timestamp or entity type."""
         results = []
         for r in self._records.values():
@@ -122,20 +121,20 @@ class MockERPConnector:
             results.append(r)
         return results
 
-    def fetch_record(self, tenant_id: str, external_record_id: str) -> Optional[ERPRecord]:
+    def fetch_record(self, tenant_id: str, external_record_id: str) -> ERPRecord | None:
         """Fetch a single record by external ID."""
         return self._records.get(external_record_id)
 
     def add_or_update_record(self, record: ERPRecord) -> None:
         """Mutate connector state to simulate ERP data changes."""
-        record.updated_at = datetime.now(timezone.utc)
+        record.updated_at = datetime.now(UTC)
         self._records[record.external_record_id] = record
 
     def delete_record(self, external_record_id: str) -> bool:
         """Simulate soft deletion of an ERP record."""
         if external_record_id in self._records:
             self._records[external_record_id].is_deleted = True
-            self._records[external_record_id].updated_at = datetime.now(timezone.utc)
+            self._records[external_record_id].updated_at = datetime.now(UTC)
             return True
         return False
 
@@ -155,11 +154,11 @@ class MockERPConnector:
         event: str,
         record: ERPRecord,
         tenant_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a standard simulated ERP webhook payload."""
         return {
             "event": event,  # e.g. "record.created", "record.updated", "record.deleted"
             "tenant_id": str(tenant_id),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "record": record.to_dict(),
         }

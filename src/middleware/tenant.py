@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import uuid
-from typing import Set
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
@@ -16,7 +14,7 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 
-EXEMPT_PATHS: Set[str] = {
+EXEMPT_PATHS: set[str] = {
     "/auth/login",
     "/auth/refresh",
     "/healthz",
@@ -33,11 +31,13 @@ _IN_MEMORY_TENANT_STATUS: dict[str, str] = {}
 class TenantResolutionMiddleware(BaseHTTPMiddleware):
     """Extracts, validates, and sets tenant_id context on request.state for every request."""
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Check if path is exempt
-        if request.url.path in EXEMPT_PATHS or request.url.path.startswith("/docs") or request.url.path.startswith("/redoc"):
+        if (
+            request.url.path in EXEMPT_PATHS
+            or request.url.path.startswith("/docs")
+            or request.url.path.startswith("/redoc")
+        ):
             return await call_next(request)
 
         tenant_id: str | None = None
@@ -70,8 +70,10 @@ class TenantResolutionMiddleware(BaseHTTPMiddleware):
                 # Query DB to check status with timeout
                 try:
                     import asyncio
-                    from src.db.engine import get_engine
+
                     from sqlalchemy import text
+
+                    from src.db.engine import get_engine
 
                     engine = get_engine()
 
@@ -84,7 +86,8 @@ class TenantResolutionMiddleware(BaseHTTPMiddleware):
                             row = res.fetchone()
                             return row[0] if row else "active"
 
-                    cached_status = await asyncio.wait_for(_check_db(), timeout=1.0)
+                    res_status = await asyncio.wait_for(_check_db(), timeout=1.0)
+                    cached_status = str(res_status) if res_status else "active"
                 except Exception as e:
                     logger.debug("DB tenant verification unavailable or timed out: %s", e)
                     cached_status = "active"

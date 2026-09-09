@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,10 +30,10 @@ class SyncSummary:
     deleted: int = 0
     unchanged: int = 0
     failed: int = 0
-    errors: List[str] = field(default_factory=list)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    errors: list[str] = field(default_factory=list)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "tenant_id": self.tenant_id,
             "added": self.added,
@@ -56,8 +56,8 @@ class ERPSyncService:
         cls,
         tenant_id: uuid.UUID,
         session: AsyncSession,
-        connector: Optional[MockERPConnector] = None,
-        pipeline: Optional[Any] = None,
+        connector: MockERPConnector | None = None,
+        pipeline: Any | None = None,
     ) -> SyncSummary:
         """Reconcile all external ERP records for a tenant against local database and vector store."""
         summary = SyncSummary(tenant_id=str(tenant_id))
@@ -67,6 +67,7 @@ class ERPSyncService:
         rag_pipeline = pipeline
         if rag_pipeline is None:
             from src.api.app import get_pipeline
+
             rag_pipeline = get_pipeline()
 
         # 1. Fetch tenant departments to resolve department mappings
@@ -77,8 +78,8 @@ class ERPSyncService:
         dept_res = await session.execute(dept_stmt)
         departments = dept_res.scalars().all()
 
-        dept_map: Dict[str, uuid.UUID] = {}
-        fallback_dept_id: Optional[uuid.UUID] = None
+        dept_map: dict[str, uuid.UUID] = {}
+        fallback_dept_id: uuid.UUID | None = None
         for d in departments:
             dept_map[d.name.lower().strip()] = d.department_id
             if d.is_fallback:
@@ -99,11 +100,11 @@ class ERPSyncService:
             ERPSyncRecord.source_system == "mock_erp",
         )
         sync_res = await session.execute(sync_stmt)
-        existing_map: Dict[str, ERPSyncRecord] = {
+        existing_map: dict[str, ERPSyncRecord] = {
             r.external_record_id: r for r in sync_res.scalars().all()
         }
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 4. Process each ERP record
         for record in records:
@@ -252,7 +253,9 @@ class ERPSyncService:
                                 status="active",
                                 access_policy={
                                     "is_public": True,
-                                    "department_id": str(matched_dept_id) if matched_dept_id else None,
+                                    "department_id": str(matched_dept_id)
+                                    if matched_dept_id
+                                    else None,
                                     "source_system": "mock_erp",
                                     "external_record_id": record.external_record_id,
                                 },
@@ -270,7 +273,9 @@ class ERPSyncService:
                         summary.updated += 1
 
             except Exception as exc:
-                logger.exception("Error syncing ERP record %s for tenant %s: %s", ext_id, tenant_id, exc)
+                logger.exception(
+                    "Error syncing ERP record %s for tenant %s: %s", ext_id, tenant_id, exc
+                )
                 summary.failed += 1
                 summary.errors.append(f"{ext_id}: {exc}")
                 if existing:
@@ -300,8 +305,8 @@ class ERPSyncService:
         signature: str,
         secret: str,
         session: AsyncSession,
-        pipeline: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        pipeline: Any | None = None,
+    ) -> dict[str, Any]:
         """Verify webhook signature and apply single-record incremental update or deletion."""
         import json
 
@@ -354,20 +359,26 @@ class ERPSyncService:
         cls,
         tenant_id: uuid.UUID,
         session: AsyncSession,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Aggregate health metrics, counts, and last-synced timestamp for tenant ERP data."""
         stmt = select(
             func.count(ERPSyncRecord.id).label("total"),
-            func.count(ERPSyncRecord.id).filter(
+            func.count(ERPSyncRecord.id)
+            .filter(
                 ERPSyncRecord.sync_status == "synced",
                 ERPSyncRecord.is_deleted == False,  # noqa: E712
-            ).label("active_synced"),
-            func.count(ERPSyncRecord.id).filter(
+            )
+            .label("active_synced"),
+            func.count(ERPSyncRecord.id)
+            .filter(
                 ERPSyncRecord.is_deleted == True,  # noqa: E712
-            ).label("deleted"),
-            func.count(ERPSyncRecord.id).filter(
+            )
+            .label("deleted"),
+            func.count(ERPSyncRecord.id)
+            .filter(
                 ERPSyncRecord.sync_status == "failed",
-            ).label("failed"),
+            )
+            .label("failed"),
             func.max(ERPSyncRecord.last_synced_at).label("last_synced_at"),
         ).where(ERPSyncRecord.tenant_id == tenant_id)
 
@@ -388,7 +399,7 @@ class ERPSyncService:
             .group_by(Department.name)
         )
         dept_res = await session.execute(dept_stmt)
-        dept_counts = {name: count for name, count in dept_res.all()}
+        dept_counts = dict(dept_res.all())
 
         return {
             "tenant_id": str(tenant_id),
@@ -397,6 +408,8 @@ class ERPSyncService:
             "active_synced": row.active_synced if row else 0,
             "deleted": row.deleted if row else 0,
             "failed": row.failed if row else 0,
-            "last_synced_at": row.last_synced_at.isoformat() if (row and row.last_synced_at) else None,
+            "last_synced_at": row.last_synced_at.isoformat()
+            if (row and row.last_synced_at)
+            else None,
             "department_counts": dept_counts,
         }

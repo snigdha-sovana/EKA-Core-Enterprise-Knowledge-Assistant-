@@ -7,10 +7,8 @@ restoration with dry-run support.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
-import os
 import shutil
 import sys
 import tarfile
@@ -21,7 +19,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from scripts.backup.backup_postgres import compute_sha256
-from src.config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("restore")
@@ -40,14 +37,15 @@ def verify_bundle_integrity(archive_path: Path) -> dict:
     actual_hash = compute_sha256(archive_path)
 
     if sha_file.exists():
-        with open(sha_file, "r", encoding="utf-8") as f:
+        with open(sha_file, encoding="utf-8") as f:
             expected_hash = f.read().split()[0].strip()
         if actual_hash != expected_hash:
-            raise ValueError(f"Checksum mismatch! Expected {expected_hash}, calculated {actual_hash}")
+            raise ValueError(
+                f"Checksum mismatch! Expected {expected_hash}, calculated {actual_hash}"
+            )
         logger.info("Top-level archive SHA-256 verified successfully: %s", actual_hash)
     else:
         logger.warning("No companion .sha256 file found. Calculated hash: %s", actual_hash)
-
 
     # Inspect manifest inside archive
     with tarfile.open(archive_path, "r:gz") as tar:
@@ -57,7 +55,11 @@ def verify_bundle_integrity(archive_path: Path) -> dict:
             raise ValueError("Archive is missing manifest.json")
         manifest_data = json.load(f)
 
-    logger.info("Manifest loaded: Backup ID: %s | Created: %s", manifest_data.get("backup_id"), manifest_data.get("created_at"))
+    logger.info(
+        "Manifest loaded: Backup ID: %s | Created: %s",
+        manifest_data.get("backup_id"),
+        manifest_data.get("created_at"),
+    )
     return manifest_data
 
 
@@ -84,10 +86,12 @@ def restore_system(archive_path: Path, dry_run: bool = False) -> dict:
             if extracted_pg.exists():
                 computed_pg_hash = compute_sha256(extracted_pg)
                 if computed_pg_hash != pg_meta.get("sha256"):
-                    raise ValueError(f"PostgreSQL component checksum mismatch in archive!")
+                    raise ValueError("PostgreSQL component checksum mismatch in archive!")
                 logger.info("PostgreSQL component checksum verified: %s", computed_pg_hash)
             else:
-                raise FileNotFoundError(f"Missing PostgreSQL dump file inside archive: {pg_file_name}")
+                raise FileNotFoundError(
+                    f"Missing PostgreSQL dump file inside archive: {pg_file_name}"
+                )
 
         # 2. Verify ChromaDB component checksum
         chroma_meta = manifest.get("components", {}).get("chroma", {})
@@ -97,15 +101,21 @@ def restore_system(archive_path: Path, dry_run: bool = False) -> dict:
             if extracted_chroma.exists():
                 computed_chroma_hash = compute_sha256(extracted_chroma)
                 if computed_chroma_hash != chroma_meta.get("sha256"):
-                    raise ValueError(f"ChromaDB component checksum mismatch in archive!")
+                    raise ValueError("ChromaDB component checksum mismatch in archive!")
                 logger.info("ChromaDB component checksum verified: %s", computed_chroma_hash)
             else:
-                raise FileNotFoundError(f"Missing ChromaDB archive inside bundle: {chroma_file_name}")
+                raise FileNotFoundError(
+                    f"Missing ChromaDB archive inside bundle: {chroma_file_name}"
+                )
 
         if dry_run:
             logger.info("================================================================")
             logger.info("[DRY-RUN] Validation Successful! Archive is valid and healthy.")
-            logger.info("Components verified: PostgreSQL (%s), ChromaDB (%s)", pg_file_name, chroma_file_name)
+            logger.info(
+                "Components verified: PostgreSQL (%s), ChromaDB (%s)",
+                pg_file_name,
+                chroma_file_name,
+            )
             logger.info("Zero active system state was mutated.")
             logger.info("================================================================")
             return {
@@ -150,7 +160,9 @@ run_restore = restore_system
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EKA Disaster Recovery Restoration Tool")
     parser.add_argument("backup_archive", type=Path, help="Path to eka_dr_bundle_*.tar.gz")
-    parser.add_argument("--dry-run", action="store_true", help="Validate archive integrity without applying changes")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Validate archive integrity without applying changes"
+    )
     args = parser.parse_args()
 
     result = restore_system(args.backup_archive, dry_run=args.dry_run)

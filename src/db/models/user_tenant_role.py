@@ -44,12 +44,12 @@ class UserTenantRole(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship(
+    user: Mapped[User] = relationship(
         "User",
         back_populates="tenant_roles",
         foreign_keys=[user_id],
     )
-    tenant: Mapped["Tenant"] = relationship(
+    tenant: Mapped[Tenant] = relationship(
         "Tenant",
         back_populates="user_roles",
         foreign_keys=[tenant_id],

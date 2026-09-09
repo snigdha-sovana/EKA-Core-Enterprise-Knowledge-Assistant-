@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import httpx
 

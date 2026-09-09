@@ -91,23 +91,23 @@ class EscalationCase(Base, TimestampMixin):
     )
 
     # Relationships
-    tenant: Mapped["Tenant"] = relationship(  # noqa: F821
+    tenant: Mapped[Tenant] = relationship(  # noqa: F821
         "Tenant",
         foreign_keys=[tenant_id],
     )
-    department: Mapped["Department | None"] = relationship(  # noqa: F821
+    department: Mapped[Department | None] = relationship(  # noqa: F821
         "Department",
         foreign_keys=[department_id],
     )
-    user: Mapped["User | None"] = relationship(  # noqa: F821
+    user: Mapped[User | None] = relationship(  # noqa: F821
         "User",
         foreign_keys=[user_id],
     )
-    resolution_doc: Mapped["DocumentModel | None"] = relationship(  # noqa: F821
+    resolution_doc: Mapped[DocumentModel | None] = relationship(  # noqa: F821
         "DocumentModel",
         foreign_keys=[resolution_doc_id],
     )
-    resolver: Mapped["User | None"] = relationship(  # noqa: F821
+    resolver: Mapped[User | None] = relationship(  # noqa: F821
         "User",
         foreign_keys=[resolved_by],
     )

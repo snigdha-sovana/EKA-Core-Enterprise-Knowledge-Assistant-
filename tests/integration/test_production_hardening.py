@@ -10,30 +10,23 @@ Validates:
 
 from __future__ import annotations
 
-import json
-import os
-import shutil
-import tarfile
-import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from scripts.backup.backup_all import compute_sha256, run_full_backup
-from scripts.backup.backup_chroma import run_chroma_backup
-from scripts.backup.backup_postgres import run_postgres_backup
 from scripts.backup.restore import run_restore
 from src.api.app import app
 from src.config import settings
+from src.db.engine import get_async_session
 from src.middleware.rate_limit import (
     get_auth_key,
     get_client_ip,
     get_role_rate_limit,
     limiter,
 )
-
 
 # ---------------------------------------------------------------------------
 # Rate Limiting Tests
@@ -86,10 +79,6 @@ def test_role_rate_limit_resolution():
     assert get_role_rate_limit(req_anon) == settings.rate_limit_anonymous
 
 
-
-from src.db.engine import get_async_session
-
-
 def test_auth_login_rate_limiting_triggers_429():
     """Verify that exceeding rate limit on /auth/login returns 429 with RFC 6585 headers."""
     client = TestClient(app)
@@ -112,7 +101,7 @@ def test_auth_login_rate_limiting_triggers_429():
 
     try:
         got_429 = False
-        for i in range(limit_num + 3):
+        for _i in range(limit_num + 3):
             resp = client.post("/auth/login", json=payload, headers=headers)
             if resp.status_code == 429:
                 got_429 = True
@@ -126,7 +115,6 @@ def test_auth_login_rate_limiting_triggers_429():
         assert got_429, f"Expected 429 after {limit_num + 3} requests, but did not receive one"
     finally:
         app.dependency_overrides.clear()
-
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +174,6 @@ def test_restore_tamper_detection(tmp_path: Path):
         )
 
 
-
 # ---------------------------------------------------------------------------
 # Nginx Configuration Tests
 # ---------------------------------------------------------------------------
@@ -206,7 +193,6 @@ def test_nginx_configurations_exist_and_contain_required_directives():
     assert "gzip" in nginx_text and "gzip_vary" in nginx_text
     assert "client_max_body_size" in nginx_text
 
-
     default_text = default_conf.read_text(encoding="utf-8")
     # Rate limit zones
     assert "limit_req_zone $binary_remote_addr zone=auth_login" in default_text
@@ -222,4 +208,3 @@ def test_nginx_configurations_exist_and_contain_required_directives():
     # 429 error handler
     assert "error_page 429 /429.json;" in default_text
     assert "location = /429.json" in default_text
-

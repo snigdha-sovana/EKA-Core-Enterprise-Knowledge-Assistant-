@@ -7,20 +7,18 @@ self-contained archive with cryptographic SHA-256 integrity verification.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
-import os
 import sys
 import tarfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from scripts.backup.backup_postgres import run_postgres_backup, compute_sha256
 from scripts.backup.backup_chroma import run_chroma_backup
+from scripts.backup.backup_postgres import compute_sha256, run_postgres_backup
 from src.config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -30,7 +28,7 @@ logger = logging.getLogger("backup_all")
 def run_full_backup(dest_dir: Path, retention_days: int = 7) -> dict:
     """Execute complete coordinated disaster recovery backup."""
     dest_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     temp_work_dir = dest_dir / f"work_{timestamp}"
     temp_work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -55,7 +53,7 @@ def run_full_backup(dest_dir: Path, retention_days: int = 7) -> dict:
     manifest_data = {
         "format": "eka_dr_manifest_v1",
         "backup_id": f"dr-{timestamp}",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "application": "EKA - Enterprise Knowledge Assistant",
         "retention_days": retention_days,
         "components": {
@@ -92,6 +90,7 @@ def run_full_backup(dest_dir: Path, retention_days: int = 7) -> dict:
 
     # 5. Clean up temporary working directory
     import shutil
+
     shutil.rmtree(temp_work_dir, ignore_errors=True)
 
     # 6. Compute top-level bundle checksum
@@ -118,7 +117,12 @@ def run_full_backup(dest_dir: Path, retention_days: int = 7) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Master Disaster Recovery Backup Tool for EKA")
-    parser.add_argument("--dest-dir", default="./data/backups/bundles", type=Path, help="Archive destination directory")
+    parser.add_argument(
+        "--dest-dir",
+        default="./data/backups/bundles",
+        type=Path,
+        help="Archive destination directory",
+    )
     parser.add_argument("--retention-days", default=7, type=int, help="Retention period in days")
     args = parser.parse_args()
 

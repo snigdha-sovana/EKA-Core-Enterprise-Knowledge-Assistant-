@@ -1,17 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-  FileSpreadsheet,
-  ShieldCheck,
   Download,
   Search,
-  Filter,
-  CheckCircle2,
-  AlertTriangle,
-  Info,
-  Clock,
-  ExternalLink,
-  Sparkles,
-  Lock
+  Sparkles
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 

@@ -2,22 +2,16 @@
 
 from __future__ import annotations
 
-import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import app
-from src.auth.security import create_access_token, hash_password
-from src.db.models.tenant import Tenant
 from src.db.models.user import User
-from src.db.models.user_tenant_role import UserTenantRole
 from tests.integration.conftest import (
     TEST_PASSWORD,
     TEST_TENANT_ID,
     TEST_USER_EMAIL,
-    TEST_USER_ID,
 )
 
 
@@ -30,7 +24,7 @@ def test_login_success(client: TestClient, test_user: User) -> None:
 
     with patch("src.auth.router.get_async_session", return_value=mock_session):
         app.dependency_overrides[
-            getattr(__import__("src.db.engine", fromlist=["get_async_session"]), "get_async_session")
+            __import__("src.db.engine", fromlist=["get_async_session"]).get_async_session
         ] = lambda: mock_session
 
         try:
@@ -58,7 +52,7 @@ def test_login_wrong_password_returns_401(client: TestClient, test_user: User) -
 
     with patch("src.auth.router.get_async_session", return_value=mock_session):
         app.dependency_overrides[
-            getattr(__import__("src.db.engine", fromlist=["get_async_session"]), "get_async_session")
+            __import__("src.db.engine", fromlist=["get_async_session"]).get_async_session
         ] = lambda: mock_session
 
         try:
@@ -124,8 +118,10 @@ def test_ingest_with_viewer_token_forbidden(client: TestClient, viewer_token: st
 
 def test_ingest_with_curator_token_allowed(client: TestClient, curator_token: str) -> None:
     """POST /ingest with curator token passes role checks."""
-    with patch("src.api.app._resolve_ingest_source") as mock_resolve, \
-         patch("src.api.app.get_pipeline") as mock_get_pipe:
+    with (
+        patch("src.api.app._resolve_ingest_source") as mock_resolve,
+        patch("src.api.app.get_pipeline") as mock_get_pipe,
+    ):
         mock_resolve.return_value = MagicMock()
         mock_pipeline = MagicMock()
         mock_pipeline.ingest.return_value = 5
@@ -150,7 +146,9 @@ def test_admin_users_with_viewer_token_forbidden(client: TestClient, viewer_toke
     assert response.status_code == 403
 
 
-def test_admin_users_with_admin_token_allowed(client: TestClient, admin_token: str, test_user: User) -> None:
+def test_admin_users_with_admin_token_allowed(
+    client: TestClient, admin_token: str, test_user: User
+) -> None:
     """GET /admin/users with admin token returns 200 and list of tenant users."""
     mock_session = AsyncMock()
     mock_role = test_user.tenant_roles[0]
@@ -159,7 +157,7 @@ def test_admin_users_with_admin_token_allowed(client: TestClient, admin_token: s
     mock_session.execute.return_value = mock_result
 
     app.dependency_overrides[
-        getattr(__import__("src.db.engine", fromlist=["get_async_session"]), "get_async_session")
+        __import__("src.db.engine", fromlist=["get_async_session"]).get_async_session
     ] = lambda: mock_session
 
     try:
@@ -176,13 +174,15 @@ def test_admin_users_with_admin_token_allowed(client: TestClient, admin_token: s
         app.dependency_overrides.clear()
 
 
-def test_refresh_tokens_success(client: TestClient, valid_refresh_token: str, test_user: User) -> None:
+def test_refresh_tokens_success(
+    client: TestClient, valid_refresh_token: str, test_user: User
+) -> None:
     """POST /auth/refresh with valid refresh token rotates and returns new tokens."""
     mock_session = AsyncMock()
     mock_session.get.return_value = test_user
 
     app.dependency_overrides[
-        getattr(__import__("src.db.engine", fromlist=["get_async_session"]), "get_async_session")
+        __import__("src.db.engine", fromlist=["get_async_session"]).get_async_session
     ] = lambda: mock_session
 
     try:
@@ -215,7 +215,7 @@ def test_get_me_profile(client: TestClient, viewer_token: str, test_user: User) 
     mock_session.get.return_value = test_user
 
     app.dependency_overrides[
-        getattr(__import__("src.db.engine", fromlist=["get_async_session"]), "get_async_session")
+        __import__("src.db.engine", fromlist=["get_async_session"]).get_async_session
     ] = lambda: mock_session
 
     try:

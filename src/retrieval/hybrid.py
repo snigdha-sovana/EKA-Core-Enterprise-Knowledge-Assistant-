@@ -14,6 +14,7 @@ from typing import Any
 try:
     from rank_bm25 import BM25Okapi
 except ImportError:
+
     class BM25Okapi:  # type: ignore
         """Pure-Python fallback implementation of BM25Okapi when rank_bm25 is not installed."""
 
@@ -48,9 +49,12 @@ except ImportError:
                     if freq == 0:
                         continue
                     num = freq * (self.k1 + 1)
-                    denom = freq + self.k1 * (1 - self.b + self.b * (self.doc_lens[idx] / self.avgdl))
+                    denom = freq + self.k1 * (
+                        1 - self.b + self.b * (self.doc_lens[idx] / self.avgdl)
+                    )
                     scores[idx] += idf * (num / denom)
             return scores
+
 
 from src.retrieval.vector_store import VectorStore
 
@@ -110,7 +114,9 @@ class HybridRetriever:
     def build_index(self, tenant_id: str | None = None) -> None:
         """Build the BM25 index for a specific tenant (or entire collection if None)."""
         key = self._tenant_key(tenant_id)
-        where = {"tenant_id": tenant_id} if tenant_id and key != "__default__" else None
+        where: dict[str, str | int | float] | None = (
+            {"tenant_id": tenant_id} if tenant_id and key != "__default__" else None
+        )
 
         all_chunks = self.vector_store.get_all_chunks(where=where)
 
@@ -207,7 +213,9 @@ class HybridRetriever:
 
             file_size = persist_path.stat().st_size
             if file_size > self._MAX_INDEX_FILE_BYTES:
-                logger.warning("BM25 index file %s is too large (%d bytes)", persist_path, file_size)
+                logger.warning(
+                    "BM25 index file %s is too large (%d bytes)", persist_path, file_size
+                )
                 return False
 
             with open(persist_path, encoding="utf-8") as f:
@@ -304,13 +312,17 @@ class HybridRetriever:
 
         return results
 
-    def _bm25_search(self, query: str, k: int, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    def _bm25_search(
+        self, query: str, k: int, tenant_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Run BM25 keyword search scoped to a tenant."""
         key = self._tenant_key(tenant_id)
         entry = self._tenant_indices.get(key)
 
         # Load from disk if cold
-        if (entry is None or entry.get("bm25") is None) and (entry is None or not entry.get("stale")):
+        if (entry is None or entry.get("bm25") is None) and (
+            entry is None or not entry.get("stale")
+        ):
             self._load_index(tenant_id)
             entry = self._tenant_indices.get(key)
 
