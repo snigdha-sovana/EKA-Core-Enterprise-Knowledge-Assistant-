@@ -12,9 +12,10 @@ setup(
     packages=find_packages(where=".", include=["src", "src.*"]),
     python_requires=">=3.11",
     install_requires=[
-        "pydantic>=2.0.0",
+        "pydantic[email]>=2.0.0",
         "pydantic-settings>=2.0.0",
         "python-dotenv>=1.0.0",
+        "email-validator>=2.0.0",
         "pypdf>=3.0.0",
         "chromadb>=0.4.0",
         "sentence-transformers>=2.2.0",
