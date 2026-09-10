@@ -40,55 +40,72 @@ async def dump_postgres_via_python(output_path: Path) -> dict:
     from sqlalchemy.pool import NullPool
 
     logger.info("Extracting PostgreSQL schema and tables via isolated NullPool connection...")
-    temp_engine = create_async_engine(settings.database_url, poolclass=NullPool)
-
     tables_data = {}
     row_counts = {}
 
     try:
-        async with AsyncSession(temp_engine) as session:
-            # Query all public tables
-            tables_stmt = text(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
-            )
-            res = await session.execute(tables_stmt)
-            table_names = [row[0] for row in res.fetchall()]
+        temp_engine = create_async_engine(settings.database_url, poolclass=NullPool)
+        try:
+            async with AsyncSession(temp_engine) as session:
+                # Query all public tables
+                tables_stmt = text(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
+                )
+                res = await session.execute(tables_stmt)
+                table_names = [row[0] for row in res.fetchall()]
 
-            for tname in table_names:
-                count_stmt = text(f'SELECT count(*) FROM "{tname}"')
-                c_res = await session.execute(count_stmt)
-                count = c_res.scalar() or 0
-                row_counts[tname] = count
+                for tname in table_names:
+                    count_stmt = text(f'SELECT count(*) FROM "{tname}"')
+                    c_res = await session.execute(count_stmt)
+                    count = c_res.scalar() or 0
+                    row_counts[tname] = count
 
-                # Fetch rows (serialized as JSON strings for portability)
-                rows_stmt = text(f'SELECT * FROM "{tname}"')
-                r_res = await session.execute(rows_stmt)
-                rows = [dict(r._mapping) for r in r_res.fetchall()]
+                    # Fetch rows (serialized as JSON strings for portability)
+                    rows_stmt = text(f'SELECT * FROM "{tname}"')
+                    r_res = await session.execute(rows_stmt)
+                    rows = [dict(r._mapping) for r in r_res.fetchall()]
 
-                # Convert UUIDs and datetimes to strings
-                for r in rows:
-                    for k, v in r.items():
-                        if isinstance(v, (datetime,)):
-                            r[k] = v.isoformat()
-                        elif hasattr(v, "hex"):
-                            r[k] = str(v)
-                tables_data[tname] = rows
+                    # Convert UUIDs and datetimes to strings
+                    for r in rows:
+                        for k, v in r.items():
+                            if isinstance(v, (datetime,)):
+                                r[k] = v.isoformat()
+                            elif hasattr(v, "hex"):
+                                r[k] = str(v)
+                    tables_data[tname] = rows
 
-        # Write compressed JSON payload
+            # Write compressed JSON payload
+            with gzip.open(output_path, "wt", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "format": "eka_postgres_json_snapshot_v1",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "tables": tables_data,
+                        "row_counts": row_counts,
+                    },
+                    f,
+                    indent=2,
+                )
+        finally:
+            await temp_engine.dispose()
+    except Exception as exc:
+        logger.warning(
+            "Could not connect to PostgreSQL for snapshot (%s). Creating offline manifest fallback.",
+            exc,
+        )
         with gzip.open(output_path, "wt", encoding="utf-8") as f:
             json.dump(
                 {
                     "format": "eka_postgres_json_snapshot_v1",
                     "timestamp": datetime.now(UTC).isoformat(),
-                    "tables": tables_data,
-                    "row_counts": row_counts,
+                    "tables": {},
+                    "row_counts": {},
+                    "offline_fallback": True,
+                    "error": str(exc),
                 },
                 f,
                 indent=2,
             )
-
-    finally:
-        await temp_engine.dispose()
 
     return row_counts
 
